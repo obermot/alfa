@@ -2,6 +2,10 @@ name: Android debug build
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'ci/BUILD_REQUEST'
 
 concurrency:
   group: alfa-android-build
