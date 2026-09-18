@@ -75,7 +75,7 @@ object ReminderNotifications {
             .setAutoCancel(false)
             .setCategory(Notification.CATEGORY_ALARM)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .addAction(Notification.Action.Builder(null, "Услышал", ackIntent).build())
+            .addAction(Notification.Action.Builder(null, "Услышал(а)", ackIntent).build())
             .addAction(Notification.Action.Builder(null, "+10 минут", snoozeIntent).build())
             .build()
 
@@ -95,6 +95,10 @@ object ReminderNotifications {
     fun cancel(context: Context, id: Long) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(notificationId(id))
+        context.getSharedPreferences("reminder_fire_counts", Context.MODE_PRIVATE)
+            .edit()
+            .remove(id.toString())
+            .apply()
     }
 }
 
