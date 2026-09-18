@@ -16,6 +16,11 @@ local.properties
 .env.*
 secrets.*
 credentials.*
+keystore.properties
+signing.properties
+service-account*.json
+firebase-adminsdk*.json
+google-services.json
 
 # OS/editor noise
 .DS_Store
