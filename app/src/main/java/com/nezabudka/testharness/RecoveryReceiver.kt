@@ -1,16 +1,20 @@
 package com.nezabudka.testharness
 
-import android.content.*
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
 
-class RecoveryReceiver:BroadcastReceiver(){
- override fun onReceive(c:Context,i:Intent){
-   val p=goAsync()
-   Thread{
-     runCatching{
-       val now=System.currentTimeMillis()
-       AlphaDatabase.get(c).reminders().active().forEach{r->if(r.dueAt>now)ReminderScheduler.schedule(c,r)}
-     }
-     p.finish()
-   }.start()
- }
+class RecoveryReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val pending = goAsync()
+        Thread {
+            try {
+                AlphaDatabase.get(context).reminders().active().forEach { reminder ->
+                    ReminderScheduler.schedule(context, reminder)
+                }
+            } finally {
+                pending.finish()
+            }
+        }.start()
+    }
 }
