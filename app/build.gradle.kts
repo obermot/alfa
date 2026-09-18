@@ -13,8 +13,8 @@ android {
         applicationId = "com.nezabudka.alpha.clean013"
         minSdk = 26
         targetSdk = 36
-        versionCode = 106
-        versionName = "0.1.6-clean-alpha"
+        versionCode = 107
+        versionName = "0.1.7-clean-alpha"
     }
 
     compileOptions {
