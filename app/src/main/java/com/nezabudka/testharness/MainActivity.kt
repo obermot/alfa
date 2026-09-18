@@ -332,6 +332,25 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         }
     }
 
+    private fun normalizedForIntent(value: String): String = value
+        .lowercase(Locale("ru"))
+        .replace('ё', 'е')
+        .replace(Regex("[^\\p{L}\\d]+"), " ")
+        .trim()
+        .replace(Regex("\\s+"), " ")
+
+    private fun isAcknowledgement(value: String): Boolean {
+        val text = normalizedForIntent(value)
+        if (text in setOf("все", "всё", "готово", "сделано")) return true
+        val phrases = listOf(
+            "сделал", "сделала", "услышал", "услышала", "понял", "поняла",
+            "хватит", "отмени", "не напоминай", "не напоминай больше",
+            "я встал", "я встала", "я уже встал", "я уже встала",
+            "уже встал", "уже встала", "можно не напоминать"
+        )
+        return phrases.any { text.contains(it) }
+    }
+
     private fun acceptVoiceCandidates(candidates: List<String>) {
         if (!listening || ignoreVoiceCallbacks) return
         val clean = candidates.map { it.trim() }.filter { it.isNotBlank() }.distinct()
@@ -346,8 +365,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
 
     private fun chooseBestCandidate(candidates: List<String>): String {
         if (captureNameMode || userName.isBlank()) return candidates.first()
-        val ackWords = listOf("сделал", "сделано", "готово", "услышал", "услышала", "понял", "поняла", "хватит", "отмени", "не напоминай", "я встал", "я встала")
-        candidates.firstOrNull { c -> ackWords.any { c.lowercase().replace('ё', 'е').contains(it) } }?.let { return it }
+        candidates.firstOrNull(::isAcknowledgement)?.let { return it }
         val pd = pendingDate
         if (pd != null) candidates.firstOrNull { TemporalParser.parseTimeAnswer(it, pd) != null }?.let { return it }
         candidates.firstOrNull { TemporalParser.parseCommand(it) !is ParseResult.Invalid }?.let { return it }
@@ -369,12 +387,8 @@ class MainActivity : ComponentActivity(), RecognitionListener {
             return true
         }
 
-        val lower = raw.lowercase().replace('ё', 'е')
-        val ackWords = listOf(
-            "сделал", "сделано", "готово", "услышал", "услышала", "понял", "поняла",
-            "хватит", "отмени", "не напоминай", "я встал", "я встала"
-        )
-        if (ackWords.any { lower.contains(it) }) {
+        val lower = normalizedForIntent(raw)
+        if (isAcknowledgement(lower)) {
             ackLatest()
             return true
         }
