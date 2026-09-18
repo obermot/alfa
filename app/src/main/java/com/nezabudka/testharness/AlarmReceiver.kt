@@ -117,14 +117,7 @@ class AlarmReceiver : BroadcastReceiver() {
                     return@Thread
                 }
 
-                val now = System.currentTimeMillis()
-                val previousFire = reminder.lastFiredAt
-                if (previousFire != null && now - previousFire < 9 * 60_000L) {
-                    pending.finish()
-                    return@Thread
-                }
-
-                val firedAt = now
+                val firedAt = System.currentTimeMillis()
                 val fired = reminder.copy(lastFiredAt = firedAt)
                 dao.update(fired)
                 ReminderNotifications.incrementFireCount(context, id)
