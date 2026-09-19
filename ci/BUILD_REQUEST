@@ -1,3 +1,3 @@
-control-build-2026-09-19T22:58+03:00
-Nezabudka alpha 0.2.3 alarm controls
-Reason: verify Vosk alarm ACK, editable-name mode, hours/minutes repeat wheels, dynamic snooze interval, pre-reminder chime, and persistent signing.
+control-build-2026-09-19T23:06+03:00
+Nezabudka alpha 0.2.4 command controls
+Reason: verify compact repeat UI, zero-repeat semantics, no-vibration chime, stable alarm ACK screen, focus-based name editing, voice cancellation/list commands, and persistent signing.
