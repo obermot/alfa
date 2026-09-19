@@ -20,11 +20,15 @@ object TemporalParser {
         "пятьдесят" to 50
     )
 
+    private val numberPart = "[\\p{L}\\d]+(?:\\s+[\\p{L}\\d]+)?"
+    private val minuteUnit = "минут|минуты|минуту|минута|мин"
+    private val hourUnit = "час|часа|часов"
+
     fun parseCommand(raw:String, now:ZonedDateTime=ZonedDateTime.now()):ParseResult {
         val s=normalize(raw)
         val intent=detectIntent(s)
             ?: if(hasTemporalSignal(s)) "remind" else null
-            ?: return ParseResult.Invalid("Не поняла просьбу. Скажите время естественной фразой, например: «через пять минут позвонить маме».")
+            ?: return ParseResult.Invalid("Не поняла просьбу. Скажите время естественной фразой, например: «пять минут» или «завтра в шесть».")
         val content=cleanupContent(s,intent)
         val recurrence=when{
             s.contains("каждый день")||s.contains("ежеднев") -> 1440L
@@ -49,7 +53,7 @@ object TemporalParser {
             if(!explicitlyDated&&!dt.isAfter(now))dt=dt.plusDays(1)
             return ParseResult.Ready(content,dt.toInstant().toEpochMilli(),recurrence)
         }
-        return ParseResult.Invalid("Не поняла время. Например: «завтра в шесть утра» или «через минуту».")
+        return ParseResult.Invalid("Не поняла время. Например: «две минуты», «1 час 20 минут» или «завтра в шесть утра».")
     }
 
     fun parseTimeAnswer(raw:String,date:LocalDate,zone:ZoneId=ZoneId.systemDefault(),now:ZonedDateTime=ZonedDateTime.now(zone)):Long? {
@@ -69,23 +73,38 @@ object TemporalParser {
         if (s.contains("через ") || s.contains("сегодня") || s.contains("завтра") || s.contains("послезавтра")) return true
         if (s.contains("утр") || s.contains("вечер") || s.contains("ночи") || s.contains("дня")) return true
         if (Regex("(?:^|\\s)(?:в|на)\\s*\\d{1,2}(?::\\d{2})?(?:\\s|$)").containsMatchIn(s)) return true
+        if (Regex("\\b(?:полминуты|пол минуты|полминутки|полчаса|пол часа)\\b").containsMatchIn(s)) return true
+        if (Regex("\\b$numberPart\\s+(?:$minuteUnit|$hourUnit)\\b").containsMatchIn(s)) return true
         return nums.keys.any { word -> Regex("(?:в|на|около)\\s+${Regex.escape(word)}(?:\\s|$)").containsMatchIn(s) }
     }
 
     private fun parseRelative(s:String,now:ZonedDateTime):Long? {
-        if (Regex("\\bчерез\\s+(полминуты|пол минуты|полминутки)\\b").containsMatchIn(s)) {
+        if (Regex("\\b(?:через\\s+)?(полминуты|пол минуты|полминутки)\\b").containsMatchIn(s)) {
             return now.plusSeconds(30).toInstant().toEpochMilli()
         }
-        if (Regex("\\bчерез\\s+(полчаса|пол часа)\\b").containsMatchIn(s)) {
+        if (Regex("\\b(?:через\\s+)?(полчаса|пол часа)\\b").containsMatchIn(s)) {
             return now.plusMinutes(30).toInstant().toEpochMilli()
         }
-        Regex("\\bчерез\\s+(минуту|минута|час)\\b").find(s)?.let { m ->
+
+        val combined = Regex(
+            "\\b(?:через\\s+)?($numberPart)\\s+($hourUnit)\\s+(?:и\\s+)?($numberPart)\\s+($minuteUnit)\\b"
+        ).find(s)
+        if (combined != null) {
+            val hours = parseNumber(combined.groupValues[1]) ?: return null
+            val minutes = parseNumber(combined.groupValues[3]) ?: return null
+            if (hours < 0 || minutes < 0) return null
+            return now.plusMinutes(hours * 60L + minutes).toInstant().toEpochMilli()
+        }
+
+        Regex("\\b(?:через\\s+)?(минуту|минута|час)\\b").find(s)?.let { m ->
             val mins=if(m.groupValues[1].startsWith("час"))60L else 1L
             return now.plusMinutes(mins).toInstant().toEpochMilli()
         }
-        val rel=Regex("\\bчерез\\s+([\\p{L}\\d]+(?:\\s+[\\p{L}\\d]+)?)\\s+(минут|минуты|минуту|час|часа|часов)\\b").find(s)
+
+        val rel=Regex("\\b(?:через\\s+)?($numberPart)\\s+($minuteUnit|$hourUnit)\\b").find(s)
         if(rel!=null){
             val n=parseNumber(rel.groupValues[1])?:return null
+            if (n < 0) return null
             val mins=if(rel.groupValues[2].startsWith("час"))n*60L else n.toLong()
             return now.plusMinutes(mins).toInstant().toEpochMilli()
         }
@@ -137,10 +156,11 @@ object TemporalParser {
             "wake" -> x.replace(Regex("^.*?(разбуди(?:ть)?|буди|поставь(?:те)?\\s+будильник|установи(?:ть)?\\s+будильник)\\s*(меня)?\\s*"),"")
             else -> x.replace(Regex("^.*?напомни(?:ть)?\\s*(мне)?\\s*"),"")
         }
-        x=x.replace(Regex("\\bчерез\\s+(полминуты|пол минуты|полминутки)\\b"),"")
-        x=x.replace(Regex("\\bчерез\\s+(полчаса|пол часа)\\b"),"")
-        x=x.replace(Regex("\\bчерез\\s+(минуту|минута|час)\\b"),"")
-        x=x.replace(Regex("\\bчерез\\s+[\\p{L}\\d]+(?:\\s+[\\p{L}\\d]+)?\\s+(минут|минуты|минуту|час|часа|часов)\\b"),"")
+        x=x.replace(Regex("\\b(?:через\\s+)?(полминуты|пол минуты|полминутки)\\b"),"")
+        x=x.replace(Regex("\\b(?:через\\s+)?(полчаса|пол часа)\\b"),"")
+        x=x.replace(Regex("\\b(?:через\\s+)?($numberPart)\\s+($hourUnit)\\s+(?:и\\s+)?($numberPart)\\s+($minuteUnit)\\b"),"")
+        x=x.replace(Regex("\\b(?:через\\s+)?(минуту|минута|час)\\b"),"")
+        x=x.replace(Regex("\\b(?:через\\s+)?$numberPart\\s+(?:$minuteUnit|$hourUnit)\\b"),"")
         x=x.replace(Regex("\\b(сегодня|завтра|послезавтра)\\b"),"")
         x=x.replace(Regex("(?:в|на)\\s*\\d{1,2}(?::\\d{2})?"),"")
         x=x.replace(Regex("\\b(утра|утром|днем|дня|вечером|вечера|ночи)\\b"),"")
