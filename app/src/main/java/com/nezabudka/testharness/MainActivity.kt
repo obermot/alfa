@@ -77,6 +77,11 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     @Composable
     private fun App() {
         var text by remember { mutableStateOf("") }
+        var editableName by remember { mutableStateOf(userName) }
+        LaunchedEffect(userName) {
+            editableName = userName
+        }
+
         MaterialTheme {
             Column(
                 Modifier.fillMaxSize().padding(16.dp),
@@ -84,6 +89,23 @@ class MainActivity : ComponentActivity(), RecognitionListener {
             ) {
                 Text("Незабудка", style = MaterialTheme.typography.headlineMedium)
                 if (status.isNotBlank()) Text(status)
+
+                if (userName.isNotBlank()) {
+                    OutlinedTextField(
+                        value = editableName,
+                        onValueChange = { editableName = it },
+                        label = { Text("Как к вам обращаться") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Button(
+                        onClick = { if (editableName.isNotBlank()) saveName(editableName) },
+                        enabled = editableName.isNotBlank() && editableName.trim() != userName,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Изменить имя")
+                    }
+                }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (!modelReady) {
@@ -215,12 +237,17 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         }
     }
 
+    private fun destroySystemRecognizer() {
+        runCatching { systemRecognizer?.cancel() }
+        runCatching { systemRecognizer?.destroy() }
+        systemRecognizer = null
+    }
+
     private fun startSystemRecognition() {
         try {
-            if (systemRecognizer == null) {
-                systemRecognizer = SpeechRecognizer.createSpeechRecognizer(this).also {
-                    it.setRecognitionListener(this)
-                }
+            destroySystemRecognizer()
+            systemRecognizer = SpeechRecognizer.createSpeechRecognizer(this).also {
+                it.setRecognitionListener(this)
             }
             usingSystemRecognizer = true
             listening = true
@@ -239,6 +266,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
             }
             systemRecognizer?.startListening(intent)
         } catch (_: Throwable) {
+            destroySystemRecognizer()
             startVoskRecognition()
         }
     }
@@ -305,7 +333,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     private fun stopListen(clearStatus: Boolean = false) {
         ignoreVoiceCallbacks = true
         listening = false
-        runCatching { systemRecognizer?.cancel() }
+        destroySystemRecognizer()
         runCatching { voskSpeech?.stop() }
         runCatching { voskSpeech?.shutdown() }
         voskSpeech = null
@@ -316,7 +344,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     private fun finishListeningSilently() {
         ignoreVoiceCallbacks = true
         listening = false
-        runCatching { systemRecognizer?.cancel() }
+        destroySystemRecognizer()
         runCatching { voskSpeech?.shutdown() }
         voskSpeech = null
         lastPartialText = ""
@@ -357,6 +385,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         if (ignoreVoiceCallbacks) return
         listening = false
         ignoreVoiceCallbacks = true
+        destroySystemRecognizer()
         status = if (userName.isBlank()) "Как к вам обращаться? Можно сказать или написать имя." else "Не расслышала. Можно повторить или написать."
     }
 
@@ -428,7 +457,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         }
         userName = cleaned
         prefs.edit().putString("user_name", cleaned).apply()
-        status = ""
+        status = "Имя сохранено: $cleaned"
         speakReply("Хорошо, $cleaned.")
     }
 
@@ -612,8 +641,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
 
     override fun onDestroy() {
         ignoreVoiceCallbacks = true
-        runCatching { systemRecognizer?.destroy() }
-        systemRecognizer = null
+        destroySystemRecognizer()
         runCatching { voskSpeech?.shutdown() }
         runCatching { model?.close() }
         super.onDestroy()
