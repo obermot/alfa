@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -156,7 +157,11 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
     private fun scheduleReadyListen(delayMs: Long) {
         if (!isQuestionReady()) return
         handler.removeCallbacksAndMessages(LISTEN_TOKEN)
-        handler.postAtTime({ consumeReadyAndListen() }, LISTEN_TOKEN, System.currentTimeMillis() + delayMs)
+        handler.postAtTime(
+            { consumeReadyAndListen() },
+            LISTEN_TOKEN,
+            SystemClock.uptimeMillis() + delayMs
+        )
     }
 
     private fun consumeReadyAndListen() {
@@ -255,7 +260,6 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
         if (reminderId > 0L) {
             readyPrefs().edit().remove(reminderId.toString()).apply()
         }
-        autoRetryCount = 0
         status = "Слушаю ответ…"
     }
 
