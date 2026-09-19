@@ -4,6 +4,34 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 
+object ReminderRepeatSettings {
+    private const val PREFS = "nezabudka_user"
+    private const val KEY_REPEAT_MINUTES = "repeat_interval_minutes"
+    const val DEFAULT_MINUTES = 10
+
+    fun getMinutes(context: Context): Int =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(KEY_REPEAT_MINUTES, DEFAULT_MINUTES)
+            .coerceAtLeast(1)
+
+    fun setMinutes(context: Context, minutes: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_REPEAT_MINUTES, minutes.coerceAtLeast(1))
+            .apply()
+    }
+
+    fun label(minutes: Int): String {
+        val h = minutes / 60
+        val m = minutes % 60
+        return when {
+            h > 0 && m > 0 -> "+${h} ч ${m} мин"
+            h > 0 -> "+${h} ч"
+            else -> "+${m} мин"
+        }
+    }
+}
+
 class ReminderActionReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_ACK = "com.nezabudka.testharness.ACTION_ACK"
@@ -55,8 +83,9 @@ class ReminderActionReceiver : BroadcastReceiver() {
 
     private fun snooze(context: Context, dao: ReminderDao, reminder: ReminderEntity) {
         ReminderScheduler.cancel(context, reminder.id)
+        val repeatMinutes = ReminderRepeatSettings.getMinutes(context)
         val next = reminder.copy(
-            dueAt = System.currentTimeMillis() + 10 * 60_000L,
+            dueAt = System.currentTimeMillis() + repeatMinutes * 60_000L,
             lastFiredAt = null,
             acknowledged = false,
             active = true
