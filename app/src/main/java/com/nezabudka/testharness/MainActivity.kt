@@ -118,7 +118,10 @@ class MainActivity : ComponentActivity(), RecognitionListener {
 
                 HorizontalDivider()
 
-                Text("Как к вам обращаться", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    if (userName.isBlank()) "Как к вам обращаться" else "Имя сохранено: $userName",
+                    style = MaterialTheme.typography.titleSmall
+                )
                 OutlinedTextField(
                     value = nameDraft,
                     onValueChange = { nameDraft = it },
@@ -131,10 +134,12 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
+                val nameChanged = nameDraft.trim().isNotBlank() && nameDraft.trim() != userName
                 Button(
-                    onClick = { if (nameDraft.isNotBlank()) saveName(nameDraft) },
+                    onClick = { saveName(nameDraft) },
+                    enabled = nameChanged,
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("Сохранить имя") }
+                ) { Text(if (nameChanged) "Сохранить имя" else "Имя сохранено") }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -234,12 +239,11 @@ class MainActivity : ComponentActivity(), RecognitionListener {
 
     private fun startSystemRecognition() {
         try {
-            if (systemRecognizer == null) {
-                systemRecognizer = SpeechRecognizer.createSpeechRecognizer(this).also { it.setRecognitionListener(this) }
-            }
+            runCatching { systemRecognizer?.destroy() }
+            systemRecognizer = SpeechRecognizer.createSpeechRecognizer(this).also { it.setRecognitionListener(this) }
             listening = true
             status = when {
-                captureNameMode || userName.isBlank() -> "Скажите имя…"
+                captureNameMode -> "Скажите имя…"
                 pendingDate != null -> "Слушаю ответ…"
                 else -> "Слушаю…"
             }
@@ -253,6 +257,8 @@ class MainActivity : ComponentActivity(), RecognitionListener {
             }
             systemRecognizer?.startListening(intent)
         } catch (_: Throwable) {
+            runCatching { systemRecognizer?.destroy() }
+            systemRecognizer = null
             startVoskRecognition()
         }
     }
@@ -286,7 +292,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                         val t = runCatching { JSONObject(hypothesis).optString("text") }.getOrDefault("").trim()
                         runOnUiThread {
                             if (t.isNotBlank()) acceptVoiceCandidates(listOf(t))
-                            else if ((captureNameMode || userName.isBlank()) && lastPartialText.isNotBlank()) acceptVoiceCandidates(listOf(lastPartialText))
+                            else if (captureNameMode && lastPartialText.isNotBlank()) acceptVoiceCandidates(listOf(lastPartialText))
                             else finishListeningSilently()
                         }
                     }
@@ -296,7 +302,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                 runOnUiThread {
                     listening = true
                     status = when {
-                        captureNameMode || userName.isBlank() -> "Скажите имя…"
+                        captureNameMode -> "Скажите имя…"
                         pendingDate != null -> "Слушаю ответ…"
                         else -> "Слушаю…"
                     }
@@ -312,6 +318,8 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         listening = false
         captureNameMode = false
         runCatching { systemRecognizer?.cancel() }
+        runCatching { systemRecognizer?.destroy() }
+        systemRecognizer = null
         runCatching { voskSpeech?.stop() }
         runCatching { voskSpeech?.shutdown() }
         voskSpeech = null
@@ -324,6 +332,8 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         listening = false
         captureNameMode = false
         runCatching { systemRecognizer?.cancel() }
+        runCatching { systemRecognizer?.destroy() }
+        systemRecognizer = null
         runCatching { voskSpeech?.shutdown() }
         voskSpeech = null
         lastPartialText = ""
@@ -341,7 +351,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
 
     private fun isAcknowledgement(value: String): Boolean {
         val text = normalizedForIntent(value)
-        if (text in setOf("все", "всё", "готово", "сделано")) return true
+        if (text in setOf("все", "готово", "сделано")) return true
         val phrases = listOf(
             "сделал", "сделала", "услышал", "услышала", "понял", "поняла",
             "хватит", "отмени", "не напоминай", "не напоминай больше",
@@ -364,7 +374,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     }
 
     private fun chooseBestCandidate(candidates: List<String>): String {
-        if (captureNameMode || userName.isBlank()) return candidates.first()
+        if (captureNameMode) return candidates.first()
         candidates.firstOrNull(::isAcknowledgement)?.let { return it }
         val pd = pendingDate
         if (pd != null) candidates.firstOrNull { TemporalParser.parseTimeAnswer(it, pd) != null }?.let { return it }
@@ -376,13 +386,16 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         if (ignoreVoiceCallbacks) return
         listening = false
         ignoreVoiceCallbacks = true
-        val wasName = captureNameMode || userName.isBlank()
+        val wasName = captureNameMode
         captureNameMode = false
-        status = if (wasName) "Имя не расслышала. Можно нажать 🎤 ещё раз или написать." else "Не расслышала. Можно повторить или написать."
+        runCatching { systemRecognizer?.cancel() }
+        runCatching { systemRecognizer?.destroy() }
+        systemRecognizer = null
+        status = if (wasName) "Имя не расслышала. Нажмите 🎤 ещё раз или введите имя ниже." else "Не расслышала. Нажмите «Говорить» ещё раз или введите напоминание текстом."
     }
 
     private fun handle(raw: String, fromVoice: Boolean): Boolean {
-        if (captureNameMode || userName.isBlank()) {
+        if (captureNameMode) {
             saveName(raw)
             return true
         }
@@ -424,7 +437,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                 true
             }
             is ParseResult.Invalid -> {
-                if (fromVoice) status = "Не уверена, что правильно расслышала. Можно повторить или написать."
+                if (fromVoice) status = "Не уверена, что правильно расслышала. Нажмите «Говорить» ещё раз или введите напоминание текстом."
                 else status = p.reason
                 false
             }
@@ -433,7 +446,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
 
     private fun saveName(raw: String) {
         val cleaned = raw
-            .lowercase()
+            .lowercase(Locale("ru"))
             .replace(Regex("^(меня зовут|зови меня|обращайся ко мне)\\s+"), "")
             .trim()
             .replace(Regex("\\s+"), " ")
@@ -446,7 +459,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         userName = cleaned
         captureNameMode = false
         prefs.edit().putString("user_name", cleaned).apply()
-        status = ""
+        status = "Имя сохранено: $cleaned"
         speakReply("Хорошо, $cleaned.")
     }
 
