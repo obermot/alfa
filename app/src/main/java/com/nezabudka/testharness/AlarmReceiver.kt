@@ -21,8 +21,6 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 object ReminderNotifications {
-    // New channel id so Android applies the no-vibration policy even if an older
-    // channel was already created with vibration enabled.
     private const val CHANNEL_ID = "nezabudka_active_reminders_v2"
 
     private fun notificationId(id: Long): Int = ((id % 1_000_000L).toInt().coerceAtLeast(1))
@@ -47,6 +45,7 @@ object ReminderNotifications {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra(AlarmActivity.EXTRA_REMINDER_ID, reminder.id)
             .putExtra(AlarmActivity.EXTRA_REMINDER_TEXT, reminder.text)
+            .putExtra(AlarmActivity.EXTRA_REPEAT_MINUTES, reminder.repeatIntervalMinutes)
         val contentIntent = PendingIntent.getActivity(
             context,
             notificationId(reminder.id) + 10_000,
@@ -63,7 +62,7 @@ object ReminderNotifications {
         )
 
         val count = fireCount(context, reminder.id)
-        val repeatMinutes = ReminderRepeatSettings.getMinutes(context)
+        val repeatMinutes = reminder.repeatIntervalMinutes.coerceAtLeast(0)
         val builder = Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle("Незабудка напомнила${if (count > 0) " ($count раз)" else ""}")
@@ -140,7 +139,7 @@ class AlarmReceiver : BroadcastReceiver() {
                         try {
                             val fresh = dao.get(id)
                             if (fresh != null && fresh.active && fresh.lastFiredAt == firedAt) {
-                                val repeatMinutes = ReminderRepeatSettings.getMinutes(context)
+                                val repeatMinutes = fresh.repeatIntervalMinutes.coerceAtLeast(0)
                                 if (repeatMinutes > 0) {
                                     val retry = fresh.copy(
                                         dueAt = System.currentTimeMillis() + repeatMinutes * 60_000L,
@@ -149,8 +148,8 @@ class AlarmReceiver : BroadcastReceiver() {
                                     dao.update(retry)
                                     ReminderScheduler.schedule(context, retry)
                                 } else {
-                                    // 0 h 0 min means one-shot notification: no automatic retry.
-                                    dao.update(fresh.copy(active = false, acknowledged = false))
+                                    // Zero means no automatic retry. Keep the reminder active and
+                                    // its persistent notification visible until explicit ACK/cancel.
                                     ReminderScheduler.cancel(context, id)
                                 }
                             }
@@ -217,8 +216,6 @@ class AlarmReceiver : BroadcastReceiver() {
         val questionId = "reminder-question-${System.currentTimeMillis()}"
         val handler = Handler(Looper.getMainLooper())
 
-        // One clear electronic chime, no vibration. Long enough to be noticed,
-        // but short enough not to compete with the spoken reminder.
         handler.post {
             runCatching {
                 tone = ToneGenerator(AudioManager.STREAM_ALARM, 100)
