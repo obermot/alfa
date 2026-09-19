@@ -85,6 +85,11 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
                         )
                         Spacer(Modifier.height(32.dp))
                         Button(
+                            onClick = { startListeningForAnswer() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Ответить голосом") }
+                        Spacer(Modifier.height(12.dp))
+                        Button(
                             onClick = { acknowledge() },
                             modifier = Modifier.fillMaxWidth()
                         ) { Text("Услышал / выключить") }
@@ -104,7 +109,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
         if (!receiverRegistered) {
             val filter = IntentFilter(ACTION_BEGIN_LISTEN)
             if (Build.VERSION.SDK_INT >= 33) {
-                registerReceiver(listenReceiver, filter, RECEIVER_NOT_EXPORTED)
+                registerReceiver(listenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
             } else {
                 @Suppress("DEPRECATION")
                 registerReceiver(listenReceiver, filter)
@@ -199,7 +204,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
 
     override fun onError(error: Int) {
         stopRecognizer()
-        status = "Не расслышала. Скажите ещё раз или нажмите кнопку."
+        status = "Не расслышала. Нажмите «Ответить голосом» и повторите."
     }
 
     override fun onResults(results: Bundle?) {
@@ -209,9 +214,9 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             acknowledge()
         } else {
             status = if (candidates.isEmpty()) {
-                "Не расслышала. Нажмите кнопку или попробуйте ещё раз."
+                "Не расслышала. Нажмите «Ответить голосом» и повторите."
             } else {
-                "Не поняла ответ. Нажмите «Услышал / выключить» или скажите подтверждение ещё раз."
+                "Не поняла ответ. Повторите голосом или нажмите «Услышал / выключить»."
             }
         }
     }
