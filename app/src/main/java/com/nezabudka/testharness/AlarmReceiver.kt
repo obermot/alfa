@@ -129,11 +129,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 ReminderNotifications.show(context, fired)
 
                 speak(context, fired.text) {
-                    context.sendBroadcast(
-                        Intent(AlarmActivity.ACTION_BEGIN_LISTEN)
-                            .setPackage(context.packageName)
-                            .putExtra(AlarmActivity.EXTRA_REMINDER_ID, id)
-                    )
+                    AlarmActivity.markQuestionReady(context, id)
                     Thread {
                         try {
                             val fresh = dao.get(id)
@@ -203,12 +199,13 @@ class AlarmReceiver : BroadcastReceiver() {
             .getString("user_name", "")
             .orEmpty()
             .trim()
-        val spoken = buildString {
+        val reminderSpeech = buildString {
             if (name.isNotBlank()) append(name).append(". ")
             append(humanReminderText(text))
-            append(" Вы услышали?")
         }
-        val utteranceId = "reminder-${System.currentTimeMillis()}"
+        val messageId = "reminder-message-${System.currentTimeMillis()}"
+        val pauseId = "reminder-pause-${System.currentTimeMillis()}"
+        val questionId = "reminder-question-${System.currentTimeMillis()}"
 
         val handler = Handler(Looper.getMainLooper())
         runCatching {
@@ -232,12 +229,18 @@ class AlarmReceiver : BroadcastReceiver() {
                     )
                     tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                         override fun onStart(utteranceId: String?) = Unit
-                        override fun onDone(utteranceId: String?) = finishOnce()
+                        override fun onDone(utteranceId: String?) {
+                            if (utteranceId == questionId) finishOnce()
+                        }
                         @Deprecated("Deprecated in Java")
-                        override fun onError(utteranceId: String?) = finishOnce()
+                        override fun onError(utteranceId: String?) {
+                            if (utteranceId == questionId || utteranceId == messageId) finishOnce()
+                        }
                     })
                     val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f) }
-                    tts?.speak(spoken, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+                    tts?.speak(reminderSpeech, TextToSpeech.QUEUE_FLUSH, params, messageId)
+                    tts?.playSilentUtterance(800L, TextToSpeech.QUEUE_ADD, pauseId)
+                    tts?.speak("Вы услышали?", TextToSpeech.QUEUE_ADD, params, questionId)
                 } else finishOnce()
             }
         }, 1800L)
