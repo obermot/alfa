@@ -17,6 +17,36 @@ android {
         versionName = "0.1.7-clean-alpha"
     }
 
+    val signingStorePath = System.getenv("NEZABUDKA_SIGNING_STORE_PATH")
+    val signingStorePassword = System.getenv("NEZABUDKA_KEYSTORE_PASSWORD")
+    val signingKeyAlias = System.getenv("NEZABUDKA_KEY_ALIAS")
+    val signingKeyPassword = System.getenv("NEZABUDKA_KEY_PASSWORD")
+    val hasPersistentSigning = listOf(
+        signingStorePath,
+        signingStorePassword,
+        signingKeyAlias,
+        signingKeyPassword
+    ).all { !it.isNullOrBlank() }
+
+    signingConfigs {
+        if (hasPersistentSigning) {
+            create("nezabudkaPersistent") {
+                storeFile = file(signingStorePath!!)
+                storePassword = signingStorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            if (hasPersistentSigning) {
+                signingConfig = signingConfigs.getByName("nezabudkaPersistent")
+            }
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
