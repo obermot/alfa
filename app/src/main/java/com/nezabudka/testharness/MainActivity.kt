@@ -13,6 +13,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.widget.NumberPicker
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,7 +23,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
@@ -42,14 +47,13 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     private var listening by mutableStateOf(false)
     private var modelReady by mutableStateOf(false)
     private var userName by mutableStateOf("")
+    private var repeatMinutes by mutableStateOf(ReminderRepeatSettings.DEFAULT_MINUTES)
 
     private var pendingText: String? = null
     private var pendingDate: LocalDate? = null
 
     private var systemRecognizer: SpeechRecognizer? = null
-    private var usingSystemRecognizer = false
     private var ignoreVoiceCallbacks = false
-
     private var model: Model? = null
     private var voskSpeech: SpeechService? = null
     private var lastPartialText = ""
@@ -65,6 +69,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         userName = prefs.getString("user_name", "").orEmpty()
+        repeatMinutes = ReminderRepeatSettings.getMinutes(this)
         modelReady = modelDir().exists() && !modelDir().list().isNullOrEmpty()
         status = if (userName.isBlank()) "Как к вам обращаться?" else ""
         refresh()
@@ -78,9 +83,19 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     private fun App() {
         var text by remember { mutableStateOf("") }
         var editableName by remember { mutableStateOf(userName) }
+        var editingName by remember { mutableStateOf(false) }
+        val focusManager = LocalFocusManager.current
+        val nameFocusRequester = remember { FocusRequester() }
+
         LaunchedEffect(userName) {
             editableName = userName
         }
+        LaunchedEffect(editingName) {
+            if (editingName) nameFocusRequester.requestFocus()
+        }
+
+        val selectedHours = repeatMinutes / 60
+        val selectedMinutes = repeatMinutes % 60
 
         MaterialTheme {
             Column(
@@ -91,21 +106,93 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                 if (status.isNotBlank()) Text(status)
 
                 if (userName.isNotBlank()) {
-                    OutlinedTextField(
-                        value = editableName,
-                        onValueChange = { editableName = it },
-                        label = { Text("Как к вам обращаться") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Button(
-                        onClick = { if (editableName.isNotBlank()) saveName(editableName) },
-                        enabled = editableName.isNotBlank() && editableName.trim() != userName,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Изменить имя")
+                    if (editingName) {
+                        OutlinedTextField(
+                            value = editableName,
+                            onValueChange = { editableName = it },
+                            label = { Text("Как к вам обращаться") },
+                            modifier = Modifier.fillMaxWidth().focusRequester(nameFocusRequester),
+                            singleLine = true
+                        )
+                        Button(
+                            onClick = {
+                                if (editableName.isNotBlank()) {
+                                    saveName(editableName)
+                                    editingName = false
+                                    focusManager.clearFocus(force = true)
+                                }
+                            },
+                            enabled = editableName.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Сохранить имя") }
+                    } else {
+                        OutlinedTextField(
+                            value = userName,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Имя") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        Button(
+                            onClick = {
+                                editableName = userName
+                                editingName = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Изменить имя") }
                     }
                 }
+
+                Text("Если не подтверждено, повторить через", style = MaterialTheme.typography.titleSmall)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Column {
+                        Text("Часы")
+                        AndroidView(
+                            factory = { context ->
+                                NumberPicker(context).apply {
+                                    minValue = 0
+                                    maxValue = 999
+                                    wrapSelectorWheel = true
+                                    value = selectedHours
+                                    setOnValueChangedListener { _, _, newHours ->
+                                        val total = (newHours * 60 + repeatMinutes % 60).coerceAtLeast(1)
+                                        repeatMinutes = total
+                                        ReminderRepeatSettings.setMinutes(this@MainActivity, total)
+                                    }
+                                }
+                            },
+                            update = { picker ->
+                                if (picker.value != selectedHours) picker.value = selectedHours
+                            }
+                        )
+                    }
+                    Column {
+                        Text("Минуты")
+                        AndroidView(
+                            factory = { context ->
+                                NumberPicker(context).apply {
+                                    minValue = 0
+                                    maxValue = 59
+                                    wrapSelectorWheel = true
+                                    value = selectedMinutes
+                                    setOnValueChangedListener { _, _, newMinutes ->
+                                        val total = ((repeatMinutes / 60) * 60 + newMinutes).coerceAtLeast(1)
+                                        repeatMinutes = total
+                                        ReminderRepeatSettings.setMinutes(this@MainActivity, total)
+                                    }
+                                }
+                            },
+                            update = { picker ->
+                                if (picker.value != selectedMinutes) picker.value = selectedMinutes
+                            }
+                        )
+                    }
+                }
+                Text("Выбрано: ${formatRepeatInterval(repeatMinutes)}")
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (!modelReady) {
@@ -158,13 +245,25 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                                 Text(format(r.dueAt))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     TextButton(onClick = { ack(r) }) { Text("Услышал / сделано") }
-                                    TextButton(onClick = { snooze(r, 10) }) { Text("+10 мин") }
+                                    TextButton(onClick = { snooze(r) }) {
+                                        Text(ReminderRepeatSettings.label(repeatMinutes))
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+        }
+    }
+
+    private fun formatRepeatInterval(minutes: Int): String {
+        val h = minutes / 60
+        val m = minutes % 60
+        return when {
+            h > 0 && m > 0 -> "$h ч $m мин"
+            h > 0 -> "$h ч"
+            else -> "$m мин"
         }
     }
 
@@ -226,15 +325,9 @@ class MainActivity : ComponentActivity(), RecognitionListener {
             mic.launch(Manifest.permission.RECORD_AUDIO)
             return
         }
-
         ignoreVoiceCallbacks = false
         lastPartialText = ""
-
-        if (SpeechRecognizer.isRecognitionAvailable(this)) {
-            startSystemRecognition()
-        } else {
-            startVoskRecognition()
-        }
+        if (SpeechRecognizer.isRecognitionAvailable(this)) startSystemRecognition() else startVoskRecognition()
     }
 
     private fun destroySystemRecognizer() {
@@ -246,10 +339,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     private fun startSystemRecognition() {
         try {
             destroySystemRecognizer()
-            systemRecognizer = SpeechRecognizer.createSpeechRecognizer(this).also {
-                it.setRecognitionListener(this)
-            }
-            usingSystemRecognizer = true
+            systemRecognizer = SpeechRecognizer.createSpeechRecognizer(this).also { it.setRecognitionListener(this) }
             listening = true
             status = when {
                 userName.isBlank() -> "Как к вам обращаться? Скажите имя."
@@ -272,7 +362,6 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     }
 
     private fun startVoskRecognition() {
-        usingSystemRecognizer = false
         if (!modelReady) {
             status = "Для голосового ввода установите русский язык"
             return
@@ -291,13 +380,11 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                             runOnUiThread { if (listening) status = "Слышу: $t" }
                         }
                     }
-
                     override fun onResult(hypothesis: String) {
                         if (!listening || ignoreVoiceCallbacks) return
                         val t = runCatching { JSONObject(hypothesis).optString("text") }.getOrDefault("").trim()
                         if (t.isNotBlank()) runOnUiThread { acceptVoiceCandidates(listOf(t)) }
                     }
-
                     override fun onFinalResult(hypothesis: String) {
                         if (!listening || ignoreVoiceCallbacks) return
                         val t = runCatching { JSONObject(hypothesis).optString("text") }.getOrDefault("").trim()
@@ -307,14 +394,8 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                             else finishListeningSilently()
                         }
                     }
-
-                    override fun onError(exception: Exception) {
-                        runOnUiThread { voiceFailure() }
-                    }
-
-                    override fun onTimeout() {
-                        runOnUiThread { voiceFailure() }
-                    }
+                    override fun onError(exception: Exception) { runOnUiThread { voiceFailure() } }
+                    override fun onTimeout() { runOnUiThread { voiceFailure() } }
                 })
                 runOnUiThread {
                     listening = true
@@ -356,11 +437,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     private fun acceptVoiceCandidates(candidates: List<String>) {
         if (!listening || ignoreVoiceCallbacks) return
         val clean = candidates.map { it.trim() }.filter { it.isNotBlank() }.distinct()
-        if (clean.isEmpty()) {
-            voiceFailure()
-            return
-        }
-
+        if (clean.isEmpty()) { voiceFailure(); return }
         val selected = chooseBestCandidate(clean)
         val accepted = handle(selected, fromVoice = true)
         if (accepted) finishListeningSilently()
@@ -368,15 +445,9 @@ class MainActivity : ComponentActivity(), RecognitionListener {
 
     private fun chooseBestCandidate(candidates: List<String>): String {
         if (userName.isBlank()) return candidates.first()
-
         val ackWords = listOf("сделал", "сделано", "готово", "услышал", "услышала", "понял", "поняла", "хватит", "отмени", "не напоминай", "я встал", "я встала")
         candidates.firstOrNull { c -> ackWords.any { c.lowercase().replace('ё', 'е').contains(it) } }?.let { return it }
-
-        val pd = pendingDate
-        if (pd != null) {
-            candidates.firstOrNull { TemporalParser.parseTimeAnswer(it, pd) != null }?.let { return it }
-        }
-
+        pendingDate?.let { pd -> candidates.firstOrNull { TemporalParser.parseTimeAnswer(it, pd) != null }?.let { return it } }
         candidates.firstOrNull { TemporalParser.parseCommand(it) !is ParseResult.Invalid }?.let { return it }
         return candidates.first()
     }
@@ -390,24 +461,11 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     }
 
     private fun handle(raw: String, fromVoice: Boolean): Boolean {
-        if (userName.isBlank()) {
-            saveName(raw)
-            return true
-        }
-
+        if (userName.isBlank()) { saveName(raw); return true }
         val lower = raw.lowercase().replace('ё', 'е')
-        val ackWords = listOf(
-            "сделал", "сделано", "готово", "услышал", "услышала", "понял", "поняла",
-            "хватит", "отмени", "не напоминай", "я встал", "я встала"
-        )
-        if (ackWords.any { lower.contains(it) }) {
-            ackLatest()
-            return true
-        }
-        if (lower.startsWith("отложи") || lower.startsWith("перенеси") || lower.contains("напомни позже")) {
-            rescheduleLatest(raw)
-            return true
-        }
+        val ackWords = listOf("сделал", "сделано", "готово", "услышал", "услышала", "понял", "поняла", "хватит", "отмени", "не напоминай", "я встал", "я встала")
+        if (ackWords.any { lower.contains(it) }) { ackLatest(); return true }
+        if (lower.startsWith("отложи") || lower.startsWith("перенеси") || lower.contains("напомни позже")) { rescheduleLatest(raw); return true }
 
         val pd = pendingDate
         if (pd != null) {
@@ -425,36 +483,21 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         }
 
         return when (val p = TemporalParser.parseCommand(raw)) {
-            is ParseResult.Ready -> {
-                createReminder(p.text, p.dueAt, p.recurrenceMinutes)
-                true
-            }
-            is ParseResult.NeedTime -> {
-                pendingText = p.text
-                pendingDate = p.date
-                ask("Во сколько напомнить?")
-                true
-            }
+            is ParseResult.Ready -> { createReminder(p.text, p.dueAt, p.recurrenceMinutes); true }
+            is ParseResult.NeedTime -> { pendingText = p.text; pendingDate = p.date; ask("Во сколько напомнить?"); true }
             is ParseResult.Invalid -> {
-                if (fromVoice) status = "Не уверена, что правильно расслышала. Можно повторить или написать."
-                else status = p.reason
+                if (fromVoice) status = "Не уверена, что правильно расслышала. Можно повторить или написать." else status = p.reason
                 false
             }
         }
     }
 
     private fun saveName(raw: String) {
-        val cleaned = raw
-            .lowercase()
+        val cleaned = raw.lowercase()
             .replace(Regex("^(меня зовут|зови меня|обращайся ко мне)\\s+"), "")
-            .trim()
-            .replace(Regex("\\s+"), " ")
-            .take(40)
+            .trim().replace(Regex("\\s+"), " ").take(40)
             .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale("ru")) else it.toString() }
-        if (cleaned.isBlank()) {
-            status = "Как к вам обращаться?"
-            return
-        }
+        if (cleaned.isBlank()) { status = "Как к вам обращаться?"; return }
         userName = cleaned
         prefs.edit().putString("user_name", cleaned).apply()
         status = "Имя сохранено: $cleaned"
@@ -469,48 +512,25 @@ class MainActivity : ComponentActivity(), RecognitionListener {
             val ok = ReminderScheduler.schedule(this, r)
             runOnUiThread {
                 refresh()
-                if (ok) {
-                    status = ""
-                    speakReply("Принято. Напомню ${formatSpoken(due)}.")
-                } else {
-                    ask("Напоминание сохранено, но нужно разрешить точные напоминания.")
-                    openExactAlarmSettings()
-                }
+                if (ok) { status = ""; speakReply("Принято. Напомню ${formatSpoken(due)}.") }
+                else { ask("Напоминание сохранено, но нужно разрешить точные напоминания."); openExactAlarmSettings() }
             }
         }.start()
     }
 
-    private fun ask(message: String) {
-        status = message
-        speakReply(message)
-    }
+    private fun ask(message: String) { status = message; speakReply(message) }
 
     private fun speakReply(message: String, after: () -> Unit = {}) {
         var engine: TextToSpeech? = null
         val utteranceId = "dialog-${UUID.randomUUID()}"
         engine = TextToSpeech(applicationContext) { result ->
-            if (result != TextToSpeech.SUCCESS) {
-                runOnUiThread { after() }
-                return@TextToSpeech
-            }
+            if (result != TextToSpeech.SUCCESS) { runOnUiThread { after() }; return@TextToSpeech }
             engine?.language = Locale("ru")
-            engine?.setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build()
-            )
+            engine?.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
             engine?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) = Unit
-                override fun onDone(id: String?) {
-                    engine?.shutdown()
-                    runOnUiThread { after() }
-                }
-                @Deprecated("Deprecated in Java")
-                override fun onError(id: String?) {
-                    engine?.shutdown()
-                    runOnUiThread { after() }
-                }
+                override fun onDone(id: String?) { engine?.shutdown(); runOnUiThread { after() } }
+                @Deprecated("Deprecated in Java") override fun onError(id: String?) { engine?.shutdown(); runOnUiThread { after() } }
             })
             val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f) }
             engine?.speak(message, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
@@ -526,49 +546,36 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                 val step = r.recurrenceMinutes * 60_000L
                 while (nextDue <= System.currentTimeMillis()) nextDue += step
                 val next = r.copy(dueAt = nextDue, originalDueAt = nextDue, lastFiredAt = null, acknowledged = false)
-                dao.update(next)
-                ReminderScheduler.schedule(this, next)
-            } else {
-                dao.update(r.copy(active = false, acknowledged = true))
-            }
+                dao.update(next); ReminderScheduler.schedule(this, next)
+            } else dao.update(r.copy(active = false, acknowledged = true))
             ReminderNotifications.cancel(this, r.id)
-            runOnUiThread {
-                refresh()
-                status = ""
-            }
+            runOnUiThread { refresh(); status = "" }
         }.start()
     }
 
-    private fun snooze(r: ReminderEntity, min: Int) {
+    private fun snooze(r: ReminderEntity) {
         Thread {
             ReminderScheduler.cancel(this, r.id)
+            val min = ReminderRepeatSettings.getMinutes(this)
             val n = r.copy(dueAt = System.currentTimeMillis() + min * 60_000L, lastFiredAt = null, acknowledged = false)
             AlphaDatabase.get(this).reminders().update(n)
             ReminderScheduler.schedule(this, n)
             ReminderNotifications.cancel(this, r.id)
-            runOnUiThread {
-                refresh()
-                status = ""
-            }
+            runOnUiThread { refresh(); status = "" }
         }.start()
     }
 
     private fun ackLatest() {
         Thread {
             val r = AlphaDatabase.get(this).reminders().latestFired()
-            runOnUiThread {
-                if (r == null) status = "Нет активного сработавшего напоминания" else ack(r)
-            }
+            runOnUiThread { if (r == null) status = "Нет активного сработавшего напоминания" else ack(r) }
         }.start()
     }
 
     private fun rescheduleLatest(raw: String) {
         Thread {
             val r = AlphaDatabase.get(this).reminders().latestFired()
-            if (r == null) {
-                runOnUiThread { status = "Нет напоминания для переноса" }
-                return@Thread
-            }
+            if (r == null) { runOnUiThread { status = "Нет напоминания для переноса" }; return@Thread }
             val tail = raw.substringAfter(' ', "")
             val p = TemporalParser.parseCommand("напомни ${r.text} $tail")
             if (p is ParseResult.Ready) {
@@ -577,14 +584,8 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                 AlphaDatabase.get(this).reminders().update(n)
                 ReminderScheduler.schedule(this, n)
                 ReminderNotifications.cancel(this, r.id)
-                runOnUiThread {
-                    refresh()
-                    status = ""
-                    speakReply("Перенесено. Напомню ${formatSpoken(n.dueAt)}.")
-                }
-            } else {
-                runOnUiThread { status = "Не поняла, на какое время перенести" }
-            }
+                runOnUiThread { refresh(); status = ""; speakReply("Перенесено. Напомню ${formatSpoken(n.dueAt)}.") }
+            } else runOnUiThread { status = "Не поняла, на какое время перенести" }
         }.start()
     }
 
@@ -595,21 +596,11 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         }.start()
     }
 
-    private fun format(ms: Long) = Instant.ofEpochMilli(ms)
-        .atZone(ZoneId.systemDefault())
-        .format(DateTimeFormatter.ofPattern("dd.MM HH:mm"))
-
-    private fun formatSpoken(ms: Long): String {
-        val z = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault())
-        return z.format(DateTimeFormatter.ofPattern("dd.MM в HH:mm"))
-    }
+    private fun format(ms: Long) = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd.MM HH:mm"))
+    private fun formatSpoken(ms: Long): String = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd.MM в HH:mm"))
 
     private fun openExactAlarmSettings() {
-        if (Build.VERSION.SDK_INT >= 31) {
-            runCatching {
-                startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
-            }
-        }
+        if (Build.VERSION.SDK_INT >= 31) runCatching { startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName"))) }
     }
 
     override fun onReadyForSpeech(params: Bundle?) = Unit
@@ -617,26 +608,17 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     override fun onRmsChanged(rmsdB: Float) = Unit
     override fun onBufferReceived(buffer: ByteArray?) = Unit
     override fun onEndOfSpeech() = Unit
-
-    override fun onError(error: Int) {
-        runOnUiThread { voiceFailure() }
-    }
-
+    override fun onError(error: Int) { runOnUiThread { voiceFailure() } }
     override fun onResults(results: Bundle?) {
         if (!listening || ignoreVoiceCallbacks) return
         val candidates = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
         runOnUiThread { acceptVoiceCandidates(candidates) }
     }
-
     override fun onPartialResults(partialResults: Bundle?) {
         if (!listening || ignoreVoiceCallbacks) return
         val t = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
-        if (t.isNotBlank()) {
-            lastPartialText = t
-            runOnUiThread { if (listening) status = "Слышу: $t" }
-        }
+        if (t.isNotBlank()) { lastPartialText = t; runOnUiThread { if (listening) status = "Слышу: $t" } }
     }
-
     override fun onEvent(eventType: Int, params: Bundle?) = Unit
 
     override fun onDestroy() {
