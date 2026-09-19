@@ -112,11 +112,13 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
                             onClick = { acknowledge() },
                             modifier = Modifier.fillMaxWidth()
                         ) { Text("Услышал / выключить") }
-                        Spacer(Modifier.height(12.dp))
-                        Button(
-                            onClick = { snooze() },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text(snoozeLabel) }
+                        if (ReminderRepeatSettings.getMinutes(this@AlarmActivity) > 0) {
+                            Spacer(Modifier.height(12.dp))
+                            Button(
+                                onClick = { snooze() },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text(snoozeLabel) }
+                        }
                     }
                 }
             }
@@ -161,19 +163,13 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
         reminderId > 0L && readyPrefs().getBoolean(reminderId.toString(), false)
 
     private fun markReadyLocally() {
-        if (reminderId > 0L) {
-            readyPrefs().edit().putBoolean(reminderId.toString(), true).apply()
-        }
+        if (reminderId > 0L) readyPrefs().edit().putBoolean(reminderId.toString(), true).apply()
     }
 
     private fun scheduleReadyListen(delayMs: Long) {
         if (!isQuestionReady()) return
         handler.removeCallbacksAndMessages(LISTEN_TOKEN)
-        handler.postAtTime(
-            { consumeReadyAndListen() },
-            LISTEN_TOKEN,
-            SystemClock.uptimeMillis() + delayMs
-        )
+        handler.postAtTime({ consumeReadyAndListen() }, LISTEN_TOKEN, SystemClock.uptimeMillis() + delayMs)
     }
 
     private fun consumeReadyAndListen() {
@@ -190,13 +186,9 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             status = "Нет доступа к микрофону. Нажмите «Услышал / выключить»."
             return
         }
-
         stopListening()
-        if (modelDir().exists() && !modelDir().list().isNullOrEmpty()) {
-            startVoskListening()
-        } else {
-            startSystemListening()
-        }
+        if (modelDir().exists() && !modelDir().list().isNullOrEmpty()) startVoskListening()
+        else startSystemListening()
     }
 
     private fun startVoskListening() {
@@ -212,47 +204,41 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
                 }
                 service.startListening(object : org.vosk.android.RecognitionListener {
                     override fun onPartialResult(hypothesis: String) {
-                        val heard = runCatching { JSONObject(hypothesis).optString("partial") }
-                            .getOrDefault("").trim()
-                        if (heard.isBlank()) return
-                        runOnUiThread {
-                            status = "Слышу: $heard"
-                            if (isAcknowledgement(heard)) acknowledge()
-                        }
+                        val heard = runCatching { JSONObject(hypothesis).optString("partial") }.getOrDefault("").trim()
+                        if (heard.isNotBlank()) runOnUiThread { status = "Слышу: $heard" }
                     }
 
                     override fun onResult(hypothesis: String) {
-                        val heard = runCatching { JSONObject(hypothesis).optString("text") }
-                            .getOrDefault("").trim()
+                        val heard = runCatching { JSONObject(hypothesis).optString("text") }.getOrDefault("").trim()
                         if (heard.isBlank()) return
                         runOnUiThread {
-                            status = "Слышу: $heard"
-                            if (isAcknowledgement(heard)) acknowledge()
+                            status = "Распознано: $heard"
+                            if (isAcknowledgement(heard)) {
+                                status = "Подтверждено"
+                                handler.postDelayed({ acknowledge() }, 350L)
+                            } else {
+                                status = "Не поняла: «$heard». Скажите «услышал» или нажмите кнопку."
+                            }
                         }
                     }
 
                     override fun onFinalResult(hypothesis: String) {
-                        val heard = runCatching { JSONObject(hypothesis).optString("text") }
-                            .getOrDefault("").trim()
+                        val heard = runCatching { JSONObject(hypothesis).optString("text") }.getOrDefault("").trim()
                         runOnUiThread {
                             stopVosk()
-                            if (isAcknowledgement(heard)) {
-                                acknowledge()
+                            if (heard.isBlank()) {
+                                status = "Не расслышала. Нажмите «Ответить голосом» и повторите."
+                            } else if (isAcknowledgement(heard)) {
+                                status = "Подтверждено"
+                                handler.postDelayed({ acknowledge() }, 350L)
                             } else {
-                                status = if (heard.isBlank()) {
-                                    "Не расслышала. Нажмите «Ответить голосом» и повторите."
-                                } else {
-                                    "Не поняла: «$heard». Повторите или нажмите «Услышал / выключить»."
-                                }
+                                status = "Не поняла: «$heard». Скажите «услышал» или нажмите кнопку."
                             }
                         }
                     }
 
                     override fun onError(exception: Exception) {
-                        runOnUiThread {
-                            stopVosk()
-                            startSystemListening()
-                        }
+                        runOnUiThread { stopVosk(); startSystemListening() }
                     }
 
                     override fun onTimeout() {
@@ -263,10 +249,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
                     }
                 })
             } catch (_: Throwable) {
-                runOnUiThread {
-                    stopVosk()
-                    startSystemListening()
-                }
+                runOnUiThread { stopVosk(); startSystemListening() }
             }
         }.start()
     }
@@ -277,9 +260,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             return
         }
         stopSystemRecognizer()
-        systemRecognizer = SpeechRecognizer.createSpeechRecognizer(this).also {
-            it.setRecognitionListener(this)
-        }
+        systemRecognizer = SpeechRecognizer.createSpeechRecognizer(this).also { it.setRecognitionListener(this) }
         status = "Включаю микрофон…"
         val speechIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -297,15 +278,16 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
     }
 
     private fun isAcknowledgement(text: String): Boolean {
-        val s = text.lowercase().replace('ё', 'е').trim()
+        val s = text.lowercase().replace('ё', 'е').trim().replace(Regex("[.,!?]+"), "")
         if (s.isBlank()) return false
-        val phrases = listOf(
-            "да", "услышал", "услышала", "понял", "поняла", "хорошо", "ладно",
-            "готово", "сделал", "сделала", "все", "хватит", "отмени", "отмена",
-            "не напоминай", "можно не напоминать", "я встал", "я встала",
-            "я уже встал", "я уже встала"
+        val exactShort = setOf("да", "ага", "услышал", "услышала", "понял", "поняла", "хорошо", "ладно", "готово", "хватит", "отмена")
+        if (s in exactShort) return true
+        val strongPhrases = listOf(
+            "я тебя услышал", "я тебя услышала", "я вас услышал", "я вас услышала",
+            "я услышал", "я услышала", "все понял", "все поняла", "не напоминай",
+            "можно не напоминать", "я встал", "я встала", "я уже встал", "я уже встала"
         )
-        return phrases.any { p -> s == p || s.contains(p) }
+        return strongPhrases.any { s.contains(it) }
     }
 
     private fun clearReadyFlag() {
@@ -315,30 +297,20 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
     private fun acknowledge() {
         clearReadyFlag()
         stopListening()
-        if (reminderId <= 0L) {
-            finish()
-            return
-        }
-        sendBroadcast(
-            Intent(this, ReminderActionReceiver::class.java)
-                .setAction(ReminderActionReceiver.ACTION_ACK)
-                .putExtra(EXTRA_REMINDER_ID, reminderId)
-        )
+        if (reminderId <= 0L) { finish(); return }
+        sendBroadcast(Intent(this, ReminderActionReceiver::class.java)
+            .setAction(ReminderActionReceiver.ACTION_ACK)
+            .putExtra(EXTRA_REMINDER_ID, reminderId))
         finishAndRemoveTask()
     }
 
     private fun snooze() {
         clearReadyFlag()
         stopListening()
-        if (reminderId <= 0L) {
-            finish()
-            return
-        }
-        sendBroadcast(
-            Intent(this, ReminderActionReceiver::class.java)
-                .setAction(ReminderActionReceiver.ACTION_SNOOZE)
-                .putExtra(EXTRA_REMINDER_ID, reminderId)
-        )
+        if (reminderId <= 0L) { finish(); return }
+        sendBroadcast(Intent(this, ReminderActionReceiver::class.java)
+            .setAction(ReminderActionReceiver.ACTION_SNOOZE)
+            .putExtra(EXTRA_REMINDER_ID, reminderId))
         finishAndRemoveTask()
     }
 
@@ -354,25 +326,16 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
         voskSpeech = null
     }
 
-    private fun stopListening() {
-        stopSystemRecognizer()
-        stopVosk()
-    }
+    private fun stopListening() { stopSystemRecognizer(); stopVosk() }
 
     override fun onReadyForSpeech(params: Bundle?) {
         readyPrefs().edit().remove(reminderId.toString()).apply()
         status = "Слушаю ответ…"
     }
-
-    override fun onBeginningOfSpeech() {
-        status = "Слышу вас…"
-    }
-
+    override fun onBeginningOfSpeech() { status = "Слышу вас…" }
     override fun onRmsChanged(rmsdB: Float) = Unit
     override fun onBufferReceived(buffer: ByteArray?) = Unit
-    override fun onEndOfSpeech() {
-        status = "Распознаю ответ…"
-    }
+    override fun onEndOfSpeech() { status = "Распознаю ответ…" }
 
     override fun onError(error: Int) {
         stopSystemRecognizer()
@@ -390,27 +353,19 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
     override fun onResults(results: Bundle?) {
         val candidates = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
         stopSystemRecognizer()
-        if (candidates.any(::isAcknowledgement)) {
-            acknowledge()
+        val accepted = candidates.firstOrNull(::isAcknowledgement)
+        if (accepted != null) {
+            status = "Подтверждено"
+            handler.postDelayed({ acknowledge() }, 350L)
         } else {
-            status = if (candidates.isEmpty()) {
-                "Не расслышала. Нажмите «Ответить голосом» и повторите."
-            } else {
-                "Не поняла: «${candidates.first()}». Повторите или нажмите «Услышал / выключить»."
-            }
+            status = if (candidates.isEmpty()) "Не расслышала. Нажмите «Ответить голосом» и повторите."
+            else "Не поняла: «${candidates.first()}». Скажите «услышал» или нажмите кнопку."
         }
     }
 
     override fun onPartialResults(partialResults: Bundle?) {
-        val heard = partialResults
-            ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-            ?.firstOrNull()
-            ?.trim()
-            .orEmpty()
-        if (heard.isNotBlank()) {
-            status = "Слышу: $heard"
-            if (isAcknowledgement(heard)) acknowledge()
-        }
+        val heard = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
+        if (heard.isNotBlank()) status = "Слышу: $heard"
     }
 
     override fun onEvent(eventType: Int, params: Bundle?) = Unit
@@ -433,14 +388,10 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
         fun markQuestionReady(context: Context, reminderId: Long) {
             if (reminderId <= 0L) return
             context.getSharedPreferences(READY_PREFS, Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean(reminderId.toString(), true)
-                .apply()
-            context.sendBroadcast(
-                Intent(ACTION_BEGIN_LISTEN)
-                    .setPackage(context.packageName)
-                    .putExtra(EXTRA_REMINDER_ID, reminderId)
-            )
+                .edit().putBoolean(reminderId.toString(), true).apply()
+            context.sendBroadcast(Intent(ACTION_BEGIN_LISTEN)
+                .setPackage(context.packageName)
+                .putExtra(EXTRA_REMINDER_ID, reminderId))
         }
     }
 }
