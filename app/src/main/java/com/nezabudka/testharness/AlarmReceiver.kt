@@ -204,7 +204,6 @@ class AlarmReceiver : BroadcastReceiver() {
             append(humanReminderText(text))
         }
         val messageId = "reminder-message-${System.currentTimeMillis()}"
-        val pauseId = "reminder-pause-${System.currentTimeMillis()}"
         val questionId = "reminder-question-${System.currentTimeMillis()}"
 
         val handler = Handler(Looper.getMainLooper())
@@ -227,24 +226,42 @@ class AlarmReceiver : BroadcastReceiver() {
                             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                             .build()
                     )
+                    tts?.setSpeechRate(1.0f)
+                    tts?.setPitch(1.0f)
                     tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                         override fun onStart(utteranceId: String?) = Unit
+
                         override fun onDone(utteranceId: String?) {
-                            if (utteranceId == questionId) finishOnce()
+                            when (utteranceId) {
+                                messageId -> handler.postDelayed({
+                                    if (completed.get()) return@postDelayed
+                                    tts?.setSpeechRate(0.90f)
+                                    tts?.setPitch(1.08f)
+                                    val questionParams = Bundle().apply {
+                                        putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
+                                    }
+                                    tts?.speak(
+                                        "Вы услышали?",
+                                        TextToSpeech.QUEUE_FLUSH,
+                                        questionParams,
+                                        questionId
+                                    )
+                                }, 1600L)
+                                questionId -> finishOnce()
+                            }
                         }
+
                         @Deprecated("Deprecated in Java")
                         override fun onError(utteranceId: String?) {
-                            if (utteranceId == questionId || utteranceId == messageId) finishOnce()
+                            finishOnce()
                         }
                     })
                     val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f) }
                     tts?.speak(reminderSpeech, TextToSpeech.QUEUE_FLUSH, params, messageId)
-                    tts?.playSilentUtterance(800L, TextToSpeech.QUEUE_ADD, pauseId)
-                    tts?.speak("Вы услышали?", TextToSpeech.QUEUE_ADD, params, questionId)
                 } else finishOnce()
             }
         }, 1800L)
 
-        handler.postDelayed({ finishOnce() }, 35_000L)
+        handler.postDelayed({ finishOnce() }, 40_000L)
     }
 }
