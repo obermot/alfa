@@ -13,8 +13,8 @@ android {
         applicationId = "com.nezabudka.alpha.clean013"
         minSdk = 26
         targetSdk = 36
-        versionCode = 114
-        versionName = "0.2.4-command-controls-alpha"
+        versionCode = 115
+        versionName = "0.2.5-per-reminder-controls-alpha"
     }
 
     val signingStorePath = System.getenv("NEZABUDKA_SIGNING_STORE_PATH")
