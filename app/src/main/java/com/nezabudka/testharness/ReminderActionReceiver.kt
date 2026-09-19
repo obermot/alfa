@@ -12,16 +12,17 @@ object ReminderRepeatSettings {
     fun getMinutes(context: Context): Int =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getInt(KEY_REPEAT_MINUTES, DEFAULT_MINUTES)
-            .coerceAtLeast(1)
+            .coerceAtLeast(0)
 
     fun setMinutes(context: Context, minutes: Int) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
-            .putInt(KEY_REPEAT_MINUTES, minutes.coerceAtLeast(1))
+            .putInt(KEY_REPEAT_MINUTES, minutes.coerceAtLeast(0))
             .apply()
     }
 
     fun label(minutes: Int): String {
+        if (minutes <= 0) return "Не повторять"
         val h = minutes / 60
         val m = minutes % 60
         return when {
@@ -84,6 +85,10 @@ class ReminderActionReceiver : BroadcastReceiver() {
     private fun snooze(context: Context, dao: ReminderDao, reminder: ReminderEntity) {
         ReminderScheduler.cancel(context, reminder.id)
         val repeatMinutes = ReminderRepeatSettings.getMinutes(context)
+        if (repeatMinutes <= 0) {
+            dao.update(reminder.copy(active = false, acknowledged = true))
+            return
+        }
         val next = reminder.copy(
             dueAt = System.currentTimeMillis() + repeatMinutes * 60_000L,
             lastFiredAt = null,
