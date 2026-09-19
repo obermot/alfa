@@ -23,8 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -51,6 +50,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
 
     private var pendingText: String? = null
     private var pendingDate: LocalDate? = null
+    private var pendingDeleteAll = false
 
     private var systemRecognizer: SpeechRecognizer? = null
     private var ignoreVoiceCallbacks = false
@@ -83,116 +83,116 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     private fun App() {
         var text by remember { mutableStateOf("") }
         var editableName by remember { mutableStateOf(userName) }
-        var editingName by remember { mutableStateOf(false) }
+        var nameFocused by remember { mutableStateOf(false) }
+        var showRepeatDialog by remember { mutableStateOf(false) }
+        var tempHours by remember { mutableIntStateOf(repeatMinutes / 60) }
+        var tempMinutes by remember { mutableIntStateOf(repeatMinutes % 60) }
         val focusManager = LocalFocusManager.current
-        val nameFocusRequester = remember { FocusRequester() }
 
         LaunchedEffect(userName) {
-            editableName = userName
-        }
-        LaunchedEffect(editingName) {
-            if (editingName) nameFocusRequester.requestFocus()
+            if (!nameFocused) editableName = userName
         }
 
-        val selectedHours = repeatMinutes / 60
-        val selectedMinutes = repeatMinutes % 60
+        if (showRepeatDialog) {
+            AlertDialog(
+                onDismissRequest = { showRepeatDialog = false },
+                title = { Text("Интервал повторения") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("0 ч 0 мин — не повторять")
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            Column {
+                                Text("Часы")
+                                AndroidView(
+                                    factory = { context ->
+                                        NumberPicker(context).apply {
+                                            minValue = 0
+                                            maxValue = 999
+                                            wrapSelectorWheel = true
+                                            value = tempHours
+                                            setOnValueChangedListener { _, _, v -> tempHours = v }
+                                        }
+                                    },
+                                    update = { if (it.value != tempHours) it.value = tempHours }
+                                )
+                            }
+                            Column {
+                                Text("Минуты")
+                                AndroidView(
+                                    factory = { context ->
+                                        NumberPicker(context).apply {
+                                            minValue = 0
+                                            maxValue = 59
+                                            wrapSelectorWheel = true
+                                            value = tempMinutes
+                                            setOnValueChangedListener { _, _, v -> tempMinutes = v }
+                                        }
+                                    },
+                                    update = { if (it.value != tempMinutes) it.value = tempMinutes }
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val total = tempHours * 60 + tempMinutes
+                        repeatMinutes = total
+                        ReminderRepeatSettings.setMinutes(this, total)
+                        showRepeatDialog = false
+                    }) { Text("Сохранить") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showRepeatDialog = false }) { Text("Отмена") }
+                }
+            )
+        }
 
         MaterialTheme {
             Column(
                 Modifier.fillMaxSize().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("Незабудка", style = MaterialTheme.typography.headlineMedium)
                 if (status.isNotBlank()) Text(status)
 
                 if (userName.isNotBlank()) {
-                    if (editingName) {
-                        OutlinedTextField(
-                            value = editableName,
-                            onValueChange = { editableName = it },
-                            label = { Text("Как к вам обращаться") },
-                            modifier = Modifier.fillMaxWidth().focusRequester(nameFocusRequester),
-                            singleLine = true
-                        )
-                        Button(
-                            onClick = {
-                                if (editableName.isNotBlank()) {
-                                    saveName(editableName)
-                                    editingName = false
-                                    focusManager.clearFocus(force = true)
-                                }
-                            },
-                            enabled = editableName.isNotBlank(),
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("Сохранить имя") }
-                    } else {
-                        OutlinedTextField(
-                            value = userName,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Имя") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
-                        Button(
-                            onClick = {
-                                editableName = userName
-                                editingName = true
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("Изменить имя") }
-                    }
+                    OutlinedTextField(
+                        value = editableName,
+                        onValueChange = { editableName = it },
+                        label = { Text("Имя") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { nameFocused = it.isFocused },
+                        singleLine = true
+                    )
+                    Button(
+                        onClick = {
+                            if (editableName.isNotBlank()) {
+                                saveName(editableName)
+                                focusManager.clearFocus(force = true)
+                                nameFocused = false
+                            }
+                        },
+                        enabled = nameFocused && editableName.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Изменить имя") }
                 }
 
-                Text("Если не подтверждено, повторить через", style = MaterialTheme.typography.titleSmall)
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column {
-                        Text("Часы")
-                        AndroidView(
-                            factory = { context ->
-                                NumberPicker(context).apply {
-                                    minValue = 0
-                                    maxValue = 999
-                                    wrapSelectorWheel = true
-                                    value = selectedHours
-                                    setOnValueChangedListener { _, _, newHours ->
-                                        val total = (newHours * 60 + repeatMinutes % 60).coerceAtLeast(1)
-                                        repeatMinutes = total
-                                        ReminderRepeatSettings.setMinutes(this@MainActivity, total)
-                                    }
-                                }
-                            },
-                            update = { picker ->
-                                if (picker.value != selectedHours) picker.value = selectedHours
-                            }
-                        )
-                    }
-                    Column {
-                        Text("Минуты")
-                        AndroidView(
-                            factory = { context ->
-                                NumberPicker(context).apply {
-                                    minValue = 0
-                                    maxValue = 59
-                                    wrapSelectorWheel = true
-                                    value = selectedMinutes
-                                    setOnValueChangedListener { _, _, newMinutes ->
-                                        val total = ((repeatMinutes / 60) * 60 + newMinutes).coerceAtLeast(1)
-                                        repeatMinutes = total
-                                        ReminderRepeatSettings.setMinutes(this@MainActivity, total)
-                                    }
-                                }
-                            },
-                            update = { picker ->
-                                if (picker.value != selectedMinutes) picker.value = selectedMinutes
-                            }
-                        )
-                    }
+                    Text("Повтор: ${formatRepeatInterval(repeatMinutes)}")
+                    TextButton(onClick = {
+                        tempHours = repeatMinutes / 60
+                        tempMinutes = repeatMinutes % 60
+                        showRepeatDialog = true
+                    }) { Text("Изменить") }
                 }
-                Text("Выбрано: ${formatRepeatInterval(repeatMinutes)}")
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (!modelReady) {
@@ -211,7 +211,8 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                             when {
                                 userName.isBlank() -> "Как к вам обращаться?"
                                 pendingDate != null -> "Ответьте на уточнение"
-                                else -> "Напишите напоминание"
+                                pendingDeleteAll -> "Подтвердите удаление"
+                                else -> "Напишите команду или напоминание"
                             }
                         )
                     },
@@ -230,23 +231,31 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                     Text(
                         when {
                             userName.isBlank() -> "Сохранить имя"
-                            pendingDate != null -> "Ответить"
-                            else -> "Создать"
+                            pendingDate != null || pendingDeleteAll -> "Ответить"
+                            else -> "Выполнить"
                         }
                     )
                 }
 
                 Text("Активные напоминания", style = MaterialTheme.typography.titleMedium)
-                LazyColumn(Modifier.weight(1f)) {
-                    items(reminders) { r ->
-                        Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text(r.text)
-                                Text(format(r.dueAt))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    TextButton(onClick = { ack(r) }) { Text("Услышал / сделано") }
-                                    TextButton(onClick = { snooze(r) }) {
-                                        Text(ReminderRepeatSettings.label(repeatMinutes))
+                if (reminders.isEmpty()) {
+                    Text("Нет активных напоминаний")
+                } else {
+                    LazyColumn(Modifier.weight(1f)) {
+                        items(reminders) { r ->
+                            Card(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                                Column(Modifier.padding(10.dp)) {
+                                    Text(r.text)
+                                    Text(format(r.dueAt))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        TextButton(onClick = { cancelReminder(r, "Напоминание отменено") }) {
+                                            Text("Отменить")
+                                        }
+                                        if (repeatMinutes > 0) {
+                                            TextButton(onClick = { snooze(r) }) {
+                                                Text(ReminderRepeatSettings.label(repeatMinutes))
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -258,6 +267,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     }
 
     private fun formatRepeatInterval(minutes: Int): String {
+        if (minutes <= 0) return "не повторять"
         val h = minutes / 60
         val m = minutes % 60
         return when {
@@ -343,8 +353,8 @@ class MainActivity : ComponentActivity(), RecognitionListener {
             listening = true
             status = when {
                 userName.isBlank() -> "Как к вам обращаться? Скажите имя."
-                pendingDate != null -> "Слушаю ответ…"
-                else -> "Слушаю…"
+                pendingDate != null || pendingDeleteAll -> "Слушаю ответ…"
+                else -> "Слушаю команду…"
             }
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -401,8 +411,8 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                     listening = true
                     status = when {
                         userName.isBlank() -> "Как к вам обращаться? Скажите имя."
-                        pendingDate != null -> "Слушаю ответ…"
-                        else -> "Слушаю…"
+                        pendingDate != null || pendingDeleteAll -> "Слушаю ответ…"
+                        else -> "Слушаю команду…"
                     }
                 }
             } catch (_: Throwable) {
@@ -445,8 +455,9 @@ class MainActivity : ComponentActivity(), RecognitionListener {
 
     private fun chooseBestCandidate(candidates: List<String>): String {
         if (userName.isBlank()) return candidates.first()
-        val ackWords = listOf("сделал", "сделано", "готово", "услышал", "услышала", "понял", "поняла", "хватит", "отмени", "не напоминай", "я встал", "я встала")
-        candidates.firstOrNull { c -> ackWords.any { c.lowercase().replace('ё', 'е').contains(it) } }?.let { return it }
+        if (pendingDeleteAll) return candidates.first()
+        val commandWords = listOf("отмени", "удали", "напоминания", "список", "перенеси", "отложи", "услышал", "понял")
+        candidates.firstOrNull { c -> commandWords.any { c.lowercase().replace('ё', 'е').contains(it) } }?.let { return it }
         pendingDate?.let { pd -> candidates.firstOrNull { TemporalParser.parseTimeAnswer(it, pd) != null }?.let { return it } }
         candidates.firstOrNull { TemporalParser.parseCommand(it) !is ParseResult.Invalid }?.let { return it }
         return candidates.first()
@@ -462,8 +473,40 @@ class MainActivity : ComponentActivity(), RecognitionListener {
 
     private fun handle(raw: String, fromVoice: Boolean): Boolean {
         if (userName.isBlank()) { saveName(raw); return true }
-        val lower = raw.lowercase().replace('ё', 'е')
-        val ackWords = listOf("сделал", "сделано", "готово", "услышал", "услышала", "понял", "поняла", "хватит", "отмени", "не напоминай", "я встал", "я встала")
+        val lower = raw.lowercase().replace('ё', 'е').trim()
+
+        if (pendingDeleteAll) {
+            val yes = listOf("да", "удаляй", "удали", "подтверждаю", "верно").any { lower == it || lower.contains(it) }
+            val no = listOf("нет", "не надо", "отмена", "отмени").any { lower == it || lower.contains(it) }
+            return when {
+                yes -> { pendingDeleteAll = false; cancelAllReminders(); true }
+                no -> { pendingDeleteAll = false; status = "Удаление отменено"; speakReply("Хорошо. Не удаляю."); true }
+                else -> { ask("Удалить все активные напоминания? Ответьте да или нет."); false }
+            }
+        }
+
+        if (isListCommand(lower)) {
+            speakActiveReminders()
+            return true
+        }
+
+        if (isCancelAllCommand(lower)) {
+            pendingDeleteAll = true
+            ask("Удалить все активные напоминания? Ответьте да или нет.")
+            return true
+        }
+
+        if (isCancelLatestCommand(lower)) {
+            cancelLatestReminder()
+            return true
+        }
+
+        if (lower.startsWith("отмени напоминание") || lower.startsWith("удали напоминание") || lower.startsWith("отмени про") || lower.startsWith("удали про")) {
+            cancelByText(raw)
+            return true
+        }
+
+        val ackWords = listOf("сделал", "сделано", "готово", "услышал", "услышала", "понял", "поняла", "хватит", "не напоминай", "я встал", "я встала")
         if (ackWords.any { lower.contains(it) }) { ackLatest(); return true }
         if (lower.startsWith("отложи") || lower.startsWith("перенеси") || lower.contains("напомни позже")) { rescheduleLatest(raw); return true }
 
@@ -486,10 +529,95 @@ class MainActivity : ComponentActivity(), RecognitionListener {
             is ParseResult.Ready -> { createReminder(p.text, p.dueAt, p.recurrenceMinutes); true }
             is ParseResult.NeedTime -> { pendingText = p.text; pendingDate = p.date; ask("Во сколько напомнить?"); true }
             is ParseResult.Invalid -> {
-                if (fromVoice) status = "Не уверена, что правильно расслышала. Можно повторить или написать." else status = p.reason
+                if (fromVoice) status = "Не поняла команду. Можно повторить или написать." else status = p.reason
                 false
             }
         }
+    }
+
+    private fun isListCommand(lower: String): Boolean =
+        lower.contains("какие напомин") || lower.contains("список напомин") ||
+            lower.contains("что у меня заплан") || lower.contains("что у меня за напомин")
+
+    private fun isCancelAllCommand(lower: String): Boolean =
+        (lower.contains("отмени") || lower.contains("удали") || lower.contains("очисти")) &&
+            lower.contains("все") && lower.contains("напомин")
+
+    private fun isCancelLatestCommand(lower: String): Boolean =
+        (lower.contains("отмени") || lower.contains("удали")) &&
+            (lower.contains("последнее напомин") || lower.contains("последний будильник"))
+
+    private fun speakActiveReminders() {
+        Thread {
+            val active = AlphaDatabase.get(this).reminders().active()
+            runOnUiThread {
+                if (active.isEmpty()) {
+                    status = "Нет активных напоминаний"
+                    speakReply("Активных напоминаний нет.")
+                } else {
+                    val summary = active.take(5).joinToString("; ") { "${it.text}, ${formatSpoken(it.dueAt)}" }
+                    status = "Активных: ${active.size}"
+                    speakReply("У вас ${active.size} активных напоминаний. $summary")
+                }
+            }
+        }.start()
+    }
+
+    private fun cancelAllReminders() {
+        Thread {
+            val dao = AlphaDatabase.get(this).reminders()
+            val active = dao.active()
+            active.forEach {
+                ReminderScheduler.cancel(this, it.id)
+                ReminderNotifications.cancel(this, it.id)
+                dao.update(it.copy(active = false, acknowledged = true))
+            }
+            runOnUiThread {
+                refresh()
+                status = "Все активные напоминания отменены"
+                speakReply("Все активные напоминания отменены.")
+            }
+        }.start()
+    }
+
+    private fun cancelLatestReminder() {
+        Thread {
+            val dao = AlphaDatabase.get(this).reminders()
+            val r = dao.active().maxByOrNull { it.createdAt }
+            runOnUiThread {
+                if (r == null) {
+                    status = "Нет активных напоминаний"
+                    speakReply("Активных напоминаний нет.")
+                } else cancelReminder(r, "Последнее напоминание отменено")
+            }
+        }.start()
+    }
+
+    private fun cancelByText(raw: String) {
+        val lower = raw.lowercase().replace('ё', 'е')
+        val query = when {
+            lower.contains(" про ") -> lower.substringAfter(" про ").trim()
+            lower.startsWith("отмени напоминание") -> lower.removePrefix("отмени напоминание").trim()
+            lower.startsWith("удали напоминание") -> lower.removePrefix("удали напоминание").trim()
+            else -> ""
+        }
+        if (query.isBlank()) {
+            status = "Уточните, какое напоминание отменить"
+            speakReply("Какое напоминание отменить?")
+            return
+        }
+        Thread {
+            val matches = AlphaDatabase.get(this).reminders().active().filter {
+                it.text.lowercase().replace('ё', 'е').contains(query)
+            }
+            runOnUiThread {
+                when (matches.size) {
+                    0 -> { status = "Не нашла такое напоминание"; speakReply("Не нашла такое напоминание.") }
+                    1 -> cancelReminder(matches.first(), "Напоминание отменено")
+                    else -> { status = "Нашла несколько. Уточните формулировку"; speakReply("Нашла несколько похожих напоминаний. Уточните, какое отменить.") }
+                }
+            }
+        }.start()
     }
 
     private fun saveName(raw: String) {
@@ -537,6 +665,20 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         }
     }
 
+    private fun cancelReminder(r: ReminderEntity, message: String) {
+        Thread {
+            val dao = AlphaDatabase.get(this).reminders()
+            ReminderScheduler.cancel(this, r.id)
+            ReminderNotifications.cancel(this, r.id)
+            dao.update(r.copy(active = false, acknowledged = true))
+            runOnUiThread {
+                refresh()
+                status = message
+                speakReply(message)
+            }
+        }.start()
+    }
+
     private fun ack(r: ReminderEntity) {
         Thread {
             val dao = AlphaDatabase.get(this).reminders()
@@ -555,8 +697,9 @@ class MainActivity : ComponentActivity(), RecognitionListener {
 
     private fun snooze(r: ReminderEntity) {
         Thread {
-            ReminderScheduler.cancel(this, r.id)
             val min = ReminderRepeatSettings.getMinutes(this)
+            if (min <= 0) return@Thread
+            ReminderScheduler.cancel(this, r.id)
             val n = r.copy(dueAt = System.currentTimeMillis() + min * 60_000L, lastFiredAt = null, acknowledged = false)
             AlphaDatabase.get(this).reminders().update(n)
             ReminderScheduler.schedule(this, n)
@@ -575,12 +718,13 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     private fun rescheduleLatest(raw: String) {
         Thread {
             val r = AlphaDatabase.get(this).reminders().latestFired()
+                ?: AlphaDatabase.get(this).reminders().active().maxByOrNull { it.createdAt }
             if (r == null) { runOnUiThread { status = "Нет напоминания для переноса" }; return@Thread }
             val tail = raw.substringAfter(' ', "")
             val p = TemporalParser.parseCommand("напомни ${r.text} $tail")
             if (p is ParseResult.Ready) {
                 ReminderScheduler.cancel(this, r.id)
-                val n = r.copy(dueAt = p.dueAt, lastFiredAt = null, acknowledged = false)
+                val n = r.copy(dueAt = p.dueAt, lastFiredAt = null, acknowledged = false, active = true)
                 AlphaDatabase.get(this).reminders().update(n)
                 ReminderScheduler.schedule(this, n)
                 ReminderNotifications.cancel(this, r.id)
