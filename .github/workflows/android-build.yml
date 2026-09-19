@@ -21,15 +21,34 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Build debug APK
+
+      - name: Restore signing keystore
+        shell: bash
+        env:
+          NEZABUDKA_KEYSTORE_B64: ${{ secrets.NEZABUDKA_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$NEZABUDKA_KEYSTORE_B64"
+          printf '%s' "$NEZABUDKA_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/nezabudka-signing.jks"
+          chmod 600 "$RUNNER_TEMP/nezabudka-signing.jks"
+
+      - name: Build signed debug APK
+        env:
+          NEZABUDKA_SIGNING_STORE_PATH: ${{ runner.temp }}/nezabudka-signing.jks
+          NEZABUDKA_KEYSTORE_PASSWORD: ${{ secrets.NEZABUDKA_KEYSTORE_PASSWORD }}
+          NEZABUDKA_KEY_ALIAS: ${{ secrets.NEZABUDKA_KEY_ALIAS }}
+          NEZABUDKA_KEY_PASSWORD: ${{ secrets.NEZABUDKA_KEY_PASSWORD }}
         run: gradle :app:assembleDebug --stacktrace
+
       - uses: actions/upload-artifact@v4
         with:
           name: android-debug-apk
