@@ -1,3 +1,3 @@
-control-build-2026-09-19T17:36+03:00
-Nezabudka recovery alpha 0.1.9
-Reason: verify rollback of MainActivity to proven 0.1.5 reminder input flow while preserving persistent signing.
+control-build-2026-09-19T18:05+03:00
+Nezabudka alpha 0.2.0 alarm screen
+Reason: verify full-screen alarm activity, voice acknowledgement bridge, and 30-second relative parsing with persistent signing.
