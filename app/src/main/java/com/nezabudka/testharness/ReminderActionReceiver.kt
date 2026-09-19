@@ -14,6 +14,8 @@ object ReminderRepeatSettings {
             .getInt(KEY_REPEAT_MINUTES, DEFAULT_MINUTES)
             .coerceAtLeast(0)
 
+    // Kept as the default for newly created reminders. The visible setting itself
+    // now belongs to each ReminderEntity.
     fun setMinutes(context: Context, minutes: Int) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
@@ -29,6 +31,17 @@ object ReminderRepeatSettings {
             h > 0 && m > 0 -> "+${h} ч ${m} мин"
             h > 0 -> "+${h} ч"
             else -> "+${m} мин"
+        }
+    }
+
+    fun compactLabel(minutes: Int): String {
+        if (minutes <= 0) return "0 мин"
+        val h = minutes / 60
+        val m = minutes % 60
+        return when {
+            h > 0 && m > 0 -> "${h} ч ${m} мин"
+            h > 0 -> "${h} ч"
+            else -> "${m} мин"
         }
     }
 }
@@ -83,12 +96,10 @@ class ReminderActionReceiver : BroadcastReceiver() {
     }
 
     private fun snooze(context: Context, dao: ReminderDao, reminder: ReminderEntity) {
+        val repeatMinutes = reminder.repeatIntervalMinutes.coerceAtLeast(0)
+        if (repeatMinutes <= 0) return
+
         ReminderScheduler.cancel(context, reminder.id)
-        val repeatMinutes = ReminderRepeatSettings.getMinutes(context)
-        if (repeatMinutes <= 0) {
-            dao.update(reminder.copy(active = false, acknowledged = true))
-            return
-        }
         val next = reminder.copy(
             dueAt = System.currentTimeMillis() + repeatMinutes * 60_000L,
             lastFiredAt = null,
