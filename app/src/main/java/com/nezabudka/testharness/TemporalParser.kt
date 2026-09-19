@@ -73,6 +73,9 @@ object TemporalParser {
     }
 
     private fun parseRelative(s:String,now:ZonedDateTime):Long? {
+        if (Regex("\\bчерез\\s+(полминуты|пол минуты|полминутки)\\b").containsMatchIn(s)) {
+            return now.plusSeconds(30).toInstant().toEpochMilli()
+        }
         if (Regex("\\bчерез\\s+(полчаса|пол часа)\\b").containsMatchIn(s)) {
             return now.plusMinutes(30).toInstant().toEpochMilli()
         }
@@ -134,6 +137,7 @@ object TemporalParser {
             "wake" -> x.replace(Regex("^.*?(разбуди(?:ть)?|буди|поставь(?:те)?\\s+будильник|установи(?:ть)?\\s+будильник)\\s*(меня)?\\s*"),"")
             else -> x.replace(Regex("^.*?напомни(?:ть)?\\s*(мне)?\\s*"),"")
         }
+        x=x.replace(Regex("\\bчерез\\s+(полминуты|пол минуты|полминутки)\\b"),"")
         x=x.replace(Regex("\\bчерез\\s+(полчаса|пол часа)\\b"),"")
         x=x.replace(Regex("\\bчерез\\s+(минуту|минута|час)\\b"),"")
         x=x.replace(Regex("\\bчерез\\s+[\\p{L}\\d]+(?:\\s+[\\p{L}\\d]+)?\\s+(минут|минуты|минуту|час|часа|часов)\\b"),"")
