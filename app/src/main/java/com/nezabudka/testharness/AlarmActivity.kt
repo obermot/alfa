@@ -33,12 +33,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import org.json.JSONObject
+import org.vosk.Model
+import org.vosk.Recognizer
+import org.vosk.android.SpeechService
+import java.io.File
 
 class AlarmActivity : ComponentActivity(), RecognitionListener {
     private var reminderId: Long = 0L
     private var reminderText by mutableStateOf("")
     private var status by mutableStateOf("Напоминание")
-    private var recognizer: SpeechRecognizer? = null
+    private var snoozeLabel by mutableStateOf("+10 мин")
+
+    private var systemRecognizer: SpeechRecognizer? = null
+    private var voskModel: Model? = null
+    private var voskSpeech: SpeechService? = null
     private var receiverRegistered = false
     private var autoRetryCount = 0
     private val handler = Handler(Looper.getMainLooper())
@@ -48,7 +57,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             if (intent?.action != ACTION_BEGIN_LISTEN) return
             val id = intent.getLongExtra(EXTRA_REMINDER_ID, 0L)
             if (id != reminderId || id <= 0L) return
-            scheduleReadyListen(350L)
+            scheduleReadyListen(450L)
         }
     }
 
@@ -60,6 +69,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
         }
         reminderId = intent.getLongExtra(EXTRA_REMINDER_ID, 0L)
         reminderText = intent.getStringExtra(EXTRA_REMINDER_TEXT).orEmpty()
+        snoozeLabel = ReminderRepeatSettings.label(ReminderRepeatSettings.getMinutes(this))
 
         setContent {
             MaterialTheme {
@@ -106,7 +116,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
                         Button(
                             onClick = { snooze() },
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text("+10 минут") }
+                        ) { Text(snoozeLabel) }
                     }
                 }
             }
@@ -115,6 +125,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
 
     override fun onStart() {
         super.onStart()
+        snoozeLabel = ReminderRepeatSettings.label(ReminderRepeatSettings.getMinutes(this))
         if (!receiverRegistered) {
             val filter = IntentFilter(ACTION_BEGIN_LISTEN)
             if (Build.VERSION.SDK_INT >= 33) {
@@ -125,7 +136,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             }
             receiverRegistered = true
         }
-        scheduleReadyListen(350L)
+        scheduleReadyListen(450L)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -135,7 +146,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
 
     override fun onStop() {
         handler.removeCallbacksAndMessages(null)
-        stopRecognizer()
+        stopListening()
         if (receiverRegistered) {
             runCatching { unregisterReceiver(listenReceiver) }
             receiverRegistered = false
@@ -143,6 +154,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
         super.onStop()
     }
 
+    private fun modelDir() = File(filesDir, "models/ru")
     private fun readyPrefs() = getSharedPreferences(READY_PREFS, MODE_PRIVATE)
 
     private fun isQuestionReady(): Boolean =
@@ -165,7 +177,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
     }
 
     private fun consumeReadyAndListen() {
-        if (!isQuestionReady() || recognizer != null) return
+        if (!isQuestionReady() || systemRecognizer != null || voskSpeech != null) return
         if (!hasWindowFocus()) {
             status = "Готова слушать ответ…"
             return
@@ -178,13 +190,94 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             status = "Нет доступа к микрофону. Нажмите «Услышал / выключить»."
             return
         }
+
+        stopListening()
+        if (modelDir().exists() && !modelDir().list().isNullOrEmpty()) {
+            startVoskListening()
+        } else {
+            startSystemListening()
+        }
+    }
+
+    private fun startVoskListening() {
+        status = "Включаю локальный микрофон…"
+        Thread {
+            try {
+                if (voskModel == null) voskModel = Model(modelDir().absolutePath)
+                val service = SpeechService(Recognizer(voskModel, 16000f), 16000f)
+                voskSpeech = service
+                runOnUiThread {
+                    readyPrefs().edit().remove(reminderId.toString()).apply()
+                    status = "Слушаю ответ…"
+                }
+                service.startListening(object : org.vosk.android.RecognitionListener {
+                    override fun onPartialResult(hypothesis: String) {
+                        val heard = runCatching { JSONObject(hypothesis).optString("partial") }
+                            .getOrDefault("").trim()
+                        if (heard.isBlank()) return
+                        runOnUiThread {
+                            status = "Слышу: $heard"
+                            if (isAcknowledgement(heard)) acknowledge()
+                        }
+                    }
+
+                    override fun onResult(hypothesis: String) {
+                        val heard = runCatching { JSONObject(hypothesis).optString("text") }
+                            .getOrDefault("").trim()
+                        if (heard.isBlank()) return
+                        runOnUiThread {
+                            status = "Слышу: $heard"
+                            if (isAcknowledgement(heard)) acknowledge()
+                        }
+                    }
+
+                    override fun onFinalResult(hypothesis: String) {
+                        val heard = runCatching { JSONObject(hypothesis).optString("text") }
+                            .getOrDefault("").trim()
+                        runOnUiThread {
+                            stopVosk()
+                            if (isAcknowledgement(heard)) {
+                                acknowledge()
+                            } else {
+                                status = if (heard.isBlank()) {
+                                    "Не расслышала. Нажмите «Ответить голосом» и повторите."
+                                } else {
+                                    "Не поняла: «$heard». Повторите или нажмите «Услышал / выключить»."
+                                }
+                            }
+                        }
+                    }
+
+                    override fun onError(exception: Exception) {
+                        runOnUiThread {
+                            stopVosk()
+                            startSystemListening()
+                        }
+                    }
+
+                    override fun onTimeout() {
+                        runOnUiThread {
+                            stopVosk()
+                            status = "Не расслышала. Нажмите «Ответить голосом» и повторите."
+                        }
+                    }
+                })
+            } catch (_: Throwable) {
+                runOnUiThread {
+                    stopVosk()
+                    startSystemListening()
+                }
+            }
+        }.start()
+    }
+
+    private fun startSystemListening() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             status = "Голосовой ответ недоступен. Используйте кнопку."
             return
         }
-
-        stopRecognizer()
-        recognizer = SpeechRecognizer.createSpeechRecognizer(this).also {
+        stopSystemRecognizer()
+        systemRecognizer = SpeechRecognizer.createSpeechRecognizer(this).also {
             it.setRecognitionListener(this)
         }
         status = "Включаю микрофон…"
@@ -195,18 +288,17 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 900L)
         }
-        runCatching { recognizer?.startListening(speechIntent) }
+        runCatching { systemRecognizer?.startListening(speechIntent) }
             .onFailure {
-                stopRecognizer()
+                stopSystemRecognizer()
                 status = "Не удалось включить микрофон. Нажмите «Ответить голосом»."
             }
     }
 
     private fun isAcknowledgement(text: String): Boolean {
         val s = text.lowercase().replace('ё', 'е').trim()
+        if (s.isBlank()) return false
         val phrases = listOf(
             "да", "услышал", "услышала", "понял", "поняла", "хорошо", "ладно",
             "готово", "сделал", "сделала", "все", "хватит", "отмени", "отмена",
@@ -217,13 +309,12 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
     }
 
     private fun clearReadyFlag() {
-        if (reminderId > 0L) {
-            readyPrefs().edit().remove(reminderId.toString()).apply()
-        }
+        if (reminderId > 0L) readyPrefs().edit().remove(reminderId.toString()).apply()
     }
 
     private fun acknowledge() {
         clearReadyFlag()
+        stopListening()
         if (reminderId <= 0L) {
             finish()
             return
@@ -238,6 +329,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
 
     private fun snooze() {
         clearReadyFlag()
+        stopListening()
         if (reminderId <= 0L) {
             finish()
             return
@@ -250,16 +342,25 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
         finishAndRemoveTask()
     }
 
-    private fun stopRecognizer() {
-        runCatching { recognizer?.cancel() }
-        runCatching { recognizer?.destroy() }
-        recognizer = null
+    private fun stopSystemRecognizer() {
+        runCatching { systemRecognizer?.cancel() }
+        runCatching { systemRecognizer?.destroy() }
+        systemRecognizer = null
+    }
+
+    private fun stopVosk() {
+        runCatching { voskSpeech?.stop() }
+        runCatching { voskSpeech?.shutdown() }
+        voskSpeech = null
+    }
+
+    private fun stopListening() {
+        stopSystemRecognizer()
+        stopVosk()
     }
 
     override fun onReadyForSpeech(params: Bundle?) {
-        if (reminderId > 0L) {
-            readyPrefs().edit().remove(reminderId.toString()).apply()
-        }
+        readyPrefs().edit().remove(reminderId.toString()).apply()
         status = "Слушаю ответ…"
     }
 
@@ -274,7 +375,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
     }
 
     override fun onError(error: Int) {
-        stopRecognizer()
+        stopSystemRecognizer()
         if (autoRetryCount < 1 && hasWindowFocus()) {
             autoRetryCount++
             markReadyLocally()
@@ -288,11 +389,10 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
 
     override fun onResults(results: Bundle?) {
         val candidates = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
-        stopRecognizer()
+        stopSystemRecognizer()
         if (candidates.any(::isAcknowledgement)) {
             acknowledge()
         } else {
-            autoRetryCount = 0
             status = if (candidates.isEmpty()) {
                 "Не расслышала. Нажмите «Ответить голосом» и повторите."
             } else {
@@ -307,14 +407,19 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             ?.firstOrNull()
             ?.trim()
             .orEmpty()
-        if (heard.isNotBlank()) status = "Слышу: $heard"
+        if (heard.isNotBlank()) {
+            status = "Слышу: $heard"
+            if (isAcknowledgement(heard)) acknowledge()
+        }
     }
 
     override fun onEvent(eventType: Int, params: Bundle?) = Unit
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
-        stopRecognizer()
+        stopListening()
+        runCatching { voskModel?.close() }
+        voskModel = null
         super.onDestroy()
     }
 
