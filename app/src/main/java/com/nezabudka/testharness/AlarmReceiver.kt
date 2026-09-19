@@ -41,10 +41,14 @@ object ReminderNotifications {
             nm.createNotificationChannel(channel)
         }
 
+        val alarmIntent = Intent(context, AlarmActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(AlarmActivity.EXTRA_REMINDER_ID, reminder.id)
+            .putExtra(AlarmActivity.EXTRA_REMINDER_TEXT, reminder.text)
         val contentIntent = PendingIntent.getActivity(
             context,
             notificationId(reminder.id) + 10_000,
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            alarmIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val ackIntent = PendingIntent.getBroadcast(
@@ -71,6 +75,7 @@ object ReminderNotifications {
             .setContentText(reminder.text)
             .setStyle(Notification.BigTextStyle().bigText(reminder.text))
             .setContentIntent(contentIntent)
+            .setFullScreenIntent(contentIntent, true)
             .setOngoing(true)
             .setAutoCancel(false)
             .setCategory(Notification.CATEGORY_ALARM)
@@ -124,6 +129,11 @@ class AlarmReceiver : BroadcastReceiver() {
                 ReminderNotifications.show(context, fired)
 
                 speak(context, fired.text) {
+                    context.sendBroadcast(
+                        Intent(AlarmActivity.ACTION_BEGIN_LISTEN)
+                            .setPackage(context.packageName)
+                            .putExtra(AlarmActivity.EXTRA_REMINDER_ID, id)
+                    )
                     Thread {
                         try {
                             val fresh = dao.get(id)
