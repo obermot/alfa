@@ -43,7 +43,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             if (intent?.action != ACTION_BEGIN_LISTEN) return
             val id = intent.getLongExtra(EXTRA_REMINDER_ID, 0L)
             if (id != reminderId || id <= 0L) return
-            startListeningForAnswer()
+            consumeReadyAndListen()
         }
     }
 
@@ -116,6 +116,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             }
             receiverRegistered = true
         }
+        consumeReadyAndListen()
     }
 
     override fun onStop() {
@@ -125,6 +126,14 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             receiverRegistered = false
         }
         super.onStop()
+    }
+
+    private fun consumeReadyAndListen() {
+        if (reminderId <= 0L) return
+        val prefs = getSharedPreferences(READY_PREFS, MODE_PRIVATE)
+        if (!prefs.getBoolean(reminderId.toString(), false)) return
+        prefs.edit().remove(reminderId.toString()).apply()
+        startListeningForAnswer()
     }
 
     private fun startListeningForAnswer() {
@@ -150,7 +159,10 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
         }
         runCatching { recognizer?.startListening(speechIntent) }
-            .onFailure { status = "Не удалось включить микрофон. Используйте кнопку." }
+            .onFailure {
+                stopRecognizer()
+                status = "Не удалось включить микрофон. Нажмите «Ответить голосом»."
+            }
     }
 
     private fun isAcknowledgement(text: String): Boolean {
@@ -164,7 +176,17 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
         return phrases.any { p -> s == p || s.contains(p) }
     }
 
+    private fun clearReadyFlag() {
+        if (reminderId > 0L) {
+            getSharedPreferences(READY_PREFS, MODE_PRIVATE)
+                .edit()
+                .remove(reminderId.toString())
+                .apply()
+        }
+    }
+
     private fun acknowledge() {
+        clearReadyFlag()
         if (reminderId <= 0L) {
             finish()
             return
@@ -178,6 +200,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
     }
 
     private fun snooze() {
+        clearReadyFlag()
         if (reminderId <= 0L) {
             finish()
             return
@@ -233,5 +256,19 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
         const val ACTION_BEGIN_LISTEN = "com.nezabudka.alpha.BEGIN_ALARM_LISTEN"
         const val EXTRA_REMINDER_ID = "reminder_id"
         const val EXTRA_REMINDER_TEXT = "reminder_text"
+        private const val READY_PREFS = "alarm_question_ready"
+
+        fun markQuestionReady(context: Context, reminderId: Long) {
+            if (reminderId <= 0L) return
+            context.getSharedPreferences(READY_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(reminderId.toString(), true)
+                .apply()
+            context.sendBroadcast(
+                Intent(ACTION_BEGIN_LISTEN)
+                    .setPackage(context.packageName)
+                    .putExtra(EXTRA_REMINDER_ID, reminderId)
+            )
+        }
     }
 }
