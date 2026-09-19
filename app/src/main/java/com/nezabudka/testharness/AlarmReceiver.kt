@@ -10,8 +10,7 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.media.Ringtone
-import android.media.RingtoneManager
+import android.media.ToneGenerator
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -69,6 +68,7 @@ object ReminderNotifications {
         )
 
         val count = fireCount(context, reminder.id)
+        val snoozeLabel = ReminderRepeatSettings.label(ReminderRepeatSettings.getMinutes(context))
         val notification = Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle("Незабудка напомнила${if (count > 0) " ($count раз)" else ""}")
@@ -81,7 +81,7 @@ object ReminderNotifications {
             .setCategory(Notification.CATEGORY_ALARM)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .addAction(Notification.Action.Builder(null, "Услышал(а)", ackIntent).build())
-            .addAction(Notification.Action.Builder(null, "+10 минут", snoozeIntent).build())
+            .addAction(Notification.Action.Builder(null, snoozeLabel, snoozeIntent).build())
             .build()
 
         runCatching { nm.notify(notificationId(reminder.id), notification) }
@@ -134,8 +134,9 @@ class AlarmReceiver : BroadcastReceiver() {
                         try {
                             val fresh = dao.get(id)
                             if (fresh != null && fresh.active && fresh.lastFiredAt == firedAt) {
+                                val repeatMinutes = ReminderRepeatSettings.getMinutes(context)
                                 val retry = fresh.copy(
-                                    dueAt = System.currentTimeMillis() + 10 * 60_000L,
+                                    dueAt = System.currentTimeMillis() + repeatMinutes * 60_000L,
                                     acknowledged = false
                                 )
                                 dao.update(retry)
@@ -183,11 +184,12 @@ class AlarmReceiver : BroadcastReceiver() {
 
         val completed = AtomicBoolean(false)
         var tts: TextToSpeech? = null
-        var ringtone: Ringtone? = null
+        var tone: ToneGenerator? = null
 
         fun finishOnce() {
             if (!completed.compareAndSet(false, true)) return
-            runCatching { ringtone?.stop() }
+            runCatching { tone?.stopTone() }
+            runCatching { tone?.release() }
             runCatching { tts?.shutdown() }
             if (focusGranted && focusRequest != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 runCatching { audio.abandonAudioFocusRequest(focusRequest!!) }
@@ -205,18 +207,23 @@ class AlarmReceiver : BroadcastReceiver() {
         }
         val messageId = "reminder-message-${System.currentTimeMillis()}"
         val questionId = "reminder-question-${System.currentTimeMillis()}"
-
         val handler = Handler(Looper.getMainLooper())
-        runCatching {
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            ringtone = RingtoneManager.getRingtone(context.applicationContext, uri)
-            if (Build.VERSION.SDK_INT >= 28) ringtone?.isLooping = false
-            ringtone?.play()
+
+        handler.post {
+            runCatching {
+                tone = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+                tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 450)
+            }
         }
+        handler.postDelayed({
+            runCatching { tone?.startTone(ToneGenerator.TONE_PROP_BEEP2, 550) }
+        }, 520L)
 
         handler.postDelayed({
-            runCatching { ringtone?.stop() }
+            runCatching { tone?.stopTone() }
+            runCatching { tone?.release() }
+            tone = null
+
             tts = TextToSpeech(context.applicationContext) { result ->
                 if (result == TextToSpeech.SUCCESS) {
                     tts?.language = Locale("ru")
@@ -235,18 +242,18 @@ class AlarmReceiver : BroadcastReceiver() {
                             when (utteranceId) {
                                 messageId -> handler.postDelayed({
                                     if (completed.get()) return@postDelayed
-                                    tts?.setSpeechRate(0.90f)
-                                    tts?.setPitch(1.08f)
+                                    tts?.setSpeechRate(0.86f)
+                                    tts?.setPitch(1.12f)
                                     val questionParams = Bundle().apply {
                                         putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
                                     }
                                     tts?.speak(
-                                        "Вы услышали?",
+                                        "Вы меня услышали?",
                                         TextToSpeech.QUEUE_FLUSH,
                                         questionParams,
                                         questionId
                                     )
-                                }, 1600L)
+                                }, 2000L)
                                 questionId -> finishOnce()
                             }
                         }
@@ -260,8 +267,8 @@ class AlarmReceiver : BroadcastReceiver() {
                     tts?.speak(reminderSpeech, TextToSpeech.QUEUE_FLUSH, params, messageId)
                 } else finishOnce()
             }
-        }, 1800L)
+        }, 1350L)
 
-        handler.postDelayed({ finishOnce() }, 40_000L)
+        handler.postDelayed({ finishOnce() }, 45_000L)
     }
 }
