@@ -21,7 +21,9 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 object ReminderNotifications {
-    private const val CHANNEL_ID = "nezabudka_active_reminders"
+    // New channel id so Android applies the no-vibration policy even if an older
+    // channel was already created with vibration enabled.
+    private const val CHANNEL_ID = "nezabudka_active_reminders_v2"
 
     private fun notificationId(id: Long): Int = ((id % 1_000_000L).toInt().coerceAtLeast(1))
 
@@ -34,7 +36,8 @@ object ReminderNotifications {
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Напоминания, которые ждут подтверждения пользователя"
-                enableVibration(true)
+                enableVibration(false)
+                vibrationPattern = longArrayOf(0L)
                 setSound(null, null)
             }
             nm.createNotificationChannel(channel)
@@ -58,18 +61,10 @@ object ReminderNotifications {
                 .putExtra("reminder_id", reminder.id),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val snoozeIntent = PendingIntent.getBroadcast(
-            context,
-            notificationId(reminder.id) + 30_000,
-            Intent(context, ReminderActionReceiver::class.java)
-                .setAction(ReminderActionReceiver.ACTION_SNOOZE)
-                .putExtra("reminder_id", reminder.id),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
 
         val count = fireCount(context, reminder.id)
-        val snoozeLabel = ReminderRepeatSettings.label(ReminderRepeatSettings.getMinutes(context))
-        val notification = Notification.Builder(context, CHANNEL_ID)
+        val repeatMinutes = ReminderRepeatSettings.getMinutes(context)
+        val builder = Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle("Незабудка напомнила${if (count > 0) " ($count раз)" else ""}")
             .setContentText(reminder.text)
@@ -80,11 +75,24 @@ object ReminderNotifications {
             .setAutoCancel(false)
             .setCategory(Notification.CATEGORY_ALARM)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setVibrate(longArrayOf(0L))
             .addAction(Notification.Action.Builder(null, "Услышал(а)", ackIntent).build())
-            .addAction(Notification.Action.Builder(null, snoozeLabel, snoozeIntent).build())
-            .build()
 
-        runCatching { nm.notify(notificationId(reminder.id), notification) }
+        if (repeatMinutes > 0) {
+            val snoozeIntent = PendingIntent.getBroadcast(
+                context,
+                notificationId(reminder.id) + 30_000,
+                Intent(context, ReminderActionReceiver::class.java)
+                    .setAction(ReminderActionReceiver.ACTION_SNOOZE)
+                    .putExtra("reminder_id", reminder.id),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.addAction(
+                Notification.Action.Builder(null, ReminderRepeatSettings.label(repeatMinutes), snoozeIntent).build()
+            )
+        }
+
+        runCatching { nm.notify(notificationId(reminder.id), builder.build()) }
     }
 
     fun incrementFireCount(context: Context, id: Long): Int {
@@ -101,9 +109,7 @@ object ReminderNotifications {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(notificationId(id))
         context.getSharedPreferences("reminder_fire_counts", Context.MODE_PRIVATE)
-            .edit()
-            .remove(id.toString())
-            .apply()
+            .edit().remove(id.toString()).apply()
     }
 }
 
@@ -135,12 +141,18 @@ class AlarmReceiver : BroadcastReceiver() {
                             val fresh = dao.get(id)
                             if (fresh != null && fresh.active && fresh.lastFiredAt == firedAt) {
                                 val repeatMinutes = ReminderRepeatSettings.getMinutes(context)
-                                val retry = fresh.copy(
-                                    dueAt = System.currentTimeMillis() + repeatMinutes * 60_000L,
-                                    acknowledged = false
-                                )
-                                dao.update(retry)
-                                ReminderScheduler.schedule(context, retry)
+                                if (repeatMinutes > 0) {
+                                    val retry = fresh.copy(
+                                        dueAt = System.currentTimeMillis() + repeatMinutes * 60_000L,
+                                        acknowledged = false
+                                    )
+                                    dao.update(retry)
+                                    ReminderScheduler.schedule(context, retry)
+                                } else {
+                                    // 0 h 0 min means one-shot notification: no automatic retry.
+                                    dao.update(fresh.copy(active = false, acknowledged = false))
+                                    ReminderScheduler.cancel(context, id)
+                                }
                             }
                         } finally {
                             pending.finish()
@@ -160,8 +172,6 @@ class AlarmReceiver : BroadcastReceiver() {
                 "Просыпайтесь. Пора вставать."
             t.startsWith("позвонить ") ->
                 "Напоминаю: ${text.trim().replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale("ru")) else it.toString() }}."
-            t.startsWith("купить ") || t.startsWith("сделать ") || t.startsWith("принять ") ->
-                "Напоминаю: ${text.trim()}."
             else -> "Напоминаю: ${text.trim()}."
         }
     }
@@ -198,9 +208,7 @@ class AlarmReceiver : BroadcastReceiver() {
         }
 
         val name = context.getSharedPreferences("nezabudka_user", Context.MODE_PRIVATE)
-            .getString("user_name", "")
-            .orEmpty()
-            .trim()
+            .getString("user_name", "").orEmpty().trim()
         val reminderSpeech = buildString {
             if (name.isNotBlank()) append(name).append(". ")
             append(humanReminderText(text))
@@ -209,15 +217,14 @@ class AlarmReceiver : BroadcastReceiver() {
         val questionId = "reminder-question-${System.currentTimeMillis()}"
         val handler = Handler(Looper.getMainLooper())
 
+        // One clear electronic chime, no vibration. Long enough to be noticed,
+        // but short enough not to compete with the spoken reminder.
         handler.post {
             runCatching {
                 tone = ToneGenerator(AudioManager.STREAM_ALARM, 100)
-                tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 450)
+                tone?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 1100)
             }
         }
-        handler.postDelayed({
-            runCatching { tone?.startTone(ToneGenerator.TONE_PROP_BEEP2, 550) }
-        }, 520L)
 
         handler.postDelayed({
             runCatching { tone?.stopTone() }
@@ -242,8 +249,8 @@ class AlarmReceiver : BroadcastReceiver() {
                             when (utteranceId) {
                                 messageId -> handler.postDelayed({
                                     if (completed.get()) return@postDelayed
-                                    tts?.setSpeechRate(0.86f)
-                                    tts?.setPitch(1.12f)
+                                    tts?.setSpeechRate(0.82f)
+                                    tts?.setPitch(1.18f)
                                     val questionParams = Bundle().apply {
                                         putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
                                     }
@@ -253,21 +260,19 @@ class AlarmReceiver : BroadcastReceiver() {
                                         questionParams,
                                         questionId
                                     )
-                                }, 2000L)
+                                }, 2200L)
                                 questionId -> finishOnce()
                             }
                         }
 
                         @Deprecated("Deprecated in Java")
-                        override fun onError(utteranceId: String?) {
-                            finishOnce()
-                        }
+                        override fun onError(utteranceId: String?) { finishOnce() }
                     })
                     val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f) }
                     tts?.speak(reminderSpeech, TextToSpeech.QUEUE_FLUSH, params, messageId)
                 } else finishOnce()
             }
-        }, 1350L)
+        }, 1450L)
 
         handler.postDelayed({ finishOnce() }, 45_000L)
     }
