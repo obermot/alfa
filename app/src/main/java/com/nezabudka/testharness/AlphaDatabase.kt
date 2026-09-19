@@ -2,6 +2,8 @@ package com.nezabudka.testharness
 
 import android.content.Context
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Entity(tableName = "reminders")
 data class ReminderEntity(
@@ -10,6 +12,7 @@ data class ReminderEntity(
     val dueAt: Long,
     val originalDueAt: Long,
     val recurrenceMinutes: Long? = null,
+    @ColumnInfo(defaultValue = "10") val repeatIntervalMinutes: Int = 10,
     val active: Boolean = true,
     val acknowledged: Boolean = false,
     val lastFiredAt: Long? = null,
@@ -27,13 +30,30 @@ interface ReminderDao {
     @Query("SELECT * FROM reminders WHERE active=1 AND lastFiredAt IS NOT NULL ORDER BY lastFiredAt DESC LIMIT 1") fun latestFired(): ReminderEntity?
 }
 
-@Database(entities=[ReminderEntity::class], version=1, exportSchema=false)
+@Database(entities=[ReminderEntity::class], version=2, exportSchema=false)
 abstract class AlphaDatabase: RoomDatabase() {
     abstract fun reminders(): ReminderDao
+
     companion object {
         @Volatile private var INSTANCE: AlphaDatabase? = null
+
         fun get(context: Context): AlphaDatabase = INSTANCE ?: synchronized(this) {
-            INSTANCE ?: Room.databaseBuilder(context.applicationContext, AlphaDatabase::class.java, "nezabudka_alpha.db").build().also { INSTANCE = it }
+            val appContext = context.applicationContext
+            val legacyRepeat = ReminderRepeatSettings.getMinutes(appContext).coerceAtLeast(0)
+            val migration1To2 = object : Migration(1, 2) {
+                override fun migrate(database: SupportSQLiteDatabase) {
+                    database.execSQL(
+                        "ALTER TABLE reminders ADD COLUMN repeatIntervalMinutes INTEGER NOT NULL DEFAULT 10"
+                    )
+                    database.execSQL(
+                        "UPDATE reminders SET repeatIntervalMinutes = $legacyRepeat WHERE active = 1"
+                    )
+                }
+            }
+            INSTANCE ?: Room.databaseBuilder(appContext, AlphaDatabase::class.java, "nezabudka_alpha.db")
+                .addMigrations(migration1To2)
+                .build()
+                .also { INSTANCE = it }
         }
     }
 }
