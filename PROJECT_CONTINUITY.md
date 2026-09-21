@@ -12,7 +12,9 @@
 ## 2. Текущее приложение
 
 - Android applicationId: `com.nezabudka.alpha.clean013`.
-- Текущая версия в `main`: `0.2.5-per-reminder-controls-alpha`, versionCode `115`.
+- Последняя полностью подтверждённая стабильная телефонная база: `0.2.5-per-reminder-controls-alpha`, versionCode `115`.
+- Последняя протестированная пользователем UI-сборка: `0.2.8-phone-test-fixes`, versionCode `118`; она не считается стабильной, её фактические дефекты перечислены в `TEST_HISTORY.md`.
+- Текущий исправительный пакет разработки: `0.2.9-phone-test-batch`, versionCode `119`.
 - Базовый путь создания напоминаний восстановлен из проверенной линии 0.1.5 и подтверждён пользователем.
 - APK тестируется на физическом Android-смартфоне.
 - Фактическая полевая история версий и дефектов ведётся в `TEST_HISTORY.md`.
@@ -197,3 +199,13 @@ Repository Secrets:
 - Never implement approved UI “by eye” from a prose summary when the canonical visual reference exists. The approved visual reference and handoff are the implementation source of truth, subject only to a later explicit user instruction.
 - If a referenced source is genuinely inaccessible, do not guess from it: use the remaining canonical materials and obtain the missing source before making decisions that depend on it.
 - Re-apply this rule before each project action together with the execution-turn continuity rule.
+
+
+## Phone-test correction rule (2026-09-22)
+
+- Approved overall mockup remains the direct visual source of truth. Use its colors, icon appearance, icon scale, spacing and screen composition; do not substitute arbitrary emoji or tiny text glyphs for canonical pictograms.
+- Screen 3 must support multiple selected dates and per-date hour/minute controls, with Selected dates and time / Change all / Add date behavior.
+- All reminders canonical filters: Все / Активные / Выполненные / Удалённые.
+- A reminder disabled by its switch remains stored and visible; only the trash/delete flow deletes it.
+- Settings expose four languages: Русский / Українська / English / Español. DND interval must be editable.
+- Alarm Screen №6 and canonical delete confirmation are mandatory testable flows.
