@@ -47,6 +47,7 @@ import java.util.zip.ZipInputStream
 class MainActivity : ComponentActivity(), RecognitionListener {
     private var status by mutableStateOf("")
     private var reminders by mutableStateOf<List<ReminderEntity>>(emptyList())
+    private var allReminders by mutableStateOf<List<ReminderEntity>>(emptyList())
     private var listening by mutableStateOf(false)
     private var modelReady by mutableStateOf(false)
     private var userName by mutableStateOf("")
@@ -159,7 +160,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                 TextButton(onClick=onAll){Text("Все ›")}
             }
             LazyColumn(Modifier.weight(1f)) {
-                items(reminders.take(6), key={it.id}) { r -> ReminderRow(r, onReminder) }
+                items(allReminders.take(6), key={it.id}) { r -> ReminderRow(r, onReminder) }
             }
             BottomNav(section,onSection)
         }
@@ -178,7 +179,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                 Text(format(r.dueAt), style=MaterialTheme.typography.bodySmall)
             }
             Switch(checked=r.active,onCheckedChange={setReminderEnabled(r,it)})
-            TextButton(onClick={deleteReminder(r)}){Text("▥", color=Color.Red)}
+            TextButton(onClick={deleteReminder(r)}, modifier=Modifier.size(58.dp)){Text("▥", color=Color.Red, style=MaterialTheme.typography.headlineMedium)}
         }
         HorizontalDivider()
     }
@@ -246,7 +247,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         var dnd by remember { mutableStateOf(prefs.getBoolean("dnd_enabled",false)) }
         var about by remember { mutableStateOf(false) }
         if(editName) AlertDialog(onDismissRequest={editName=false},title={Text("Как к вам обращаться?")},text={OutlinedTextField(value=nameDraft,onValueChange={nameDraft=it},singleLine=true)},confirmButton={Button(onClick={userName=nameDraft.trim();prefs.edit().putString("user_name",userName).apply();editName=false}){Text("Сохранить")}},dismissButton={TextButton(onClick={editName=false}){Text("Отмена")}})
-        if(about) AlertDialog(onDismissRequest={about=false},title={Text("Незабудка")},text={Text("Версия 0.2.8\nПриложение голосовых и текстовых напоминаний.")},confirmButton={TextButton(onClick={about=false}){Text("ОК")}})
+        if(about) AlertDialog(onDismissRequest={about=false},title={Text("Незабудка")},text={Text("Версия 0.2.9\nПриложение голосовых и текстовых напоминаний.")},confirmButton={TextButton(onClick={about=false}){Text("ОК")}})
         Column(Modifier.fillMaxSize().padding(18.dp)) {
             Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick={onSection("reminders")}){Text("←",color=Color(0xFF006BFF))};Text("Настройки",style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f),textAlign=androidx.compose.ui.text.style.TextAlign.Center);Spacer(Modifier.width(48.dp))}
             EditorLine("♙","Как к вам обращаться?",userName.ifBlank{"Не задано"},{editName=true})
@@ -267,8 +268,16 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         LaunchedEffect(reminders){ Thread{ val x=AlphaDatabase.get(this@MainActivity).reminders().all();runOnUiThread{all=x} }.start() }
         Column(Modifier.fillMaxSize().padding(18.dp)) {
             Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick=onBack){Text("←")};Text("Все напоминания",style=MaterialTheme.typography.titleLarge)}
-            Row{listOf("Все","Активные","Выключенные").forEach{v->FilterChip(selected=filter==v,onClick={filter=v},label={Text(v)})}}
-            LazyColumn(Modifier.weight(1f)){items(all.filter{filter=="Все"||(filter=="Активные"&&it.active)||(filter=="Выключенные"&&!it.active)},key={it.id}){ReminderRow(it,onReminder)}}
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(4.dp)){listOf("Все","Активные","Выполненные","Удалённые").forEach{v->FilterChip(selected=filter==v,onClick={filter=v},label={Text(v,style=MaterialTheme.typography.labelSmall)})}}
+            LazyColumn(Modifier.weight(1f)){
+                val shown=when(filter){
+                    "Активные"->all.filter{it.active}
+                    "Выполненные"->all.filter{it.acknowledged}
+                    "Удалённые"->emptyList()
+                    else->all
+                }
+                items(shown,key={it.id}){ReminderRow(it,onReminder)}
+            }
             BottomNav(section,onSection)
         }
     }
@@ -279,7 +288,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         var filter by remember { mutableStateOf("Все") }
         LaunchedEffect(Unit){Thread{val x=AlphaDatabase.get(this@MainActivity).history().all();runOnUiThread{events=x}}.start()}
         Column(Modifier.fillMaxSize().padding(18.dp)) {
-            Text("История",style=MaterialTheme.typography.titleLarge,modifier=Modifier.fillMaxWidth(),textAlign=androidx.compose.ui.text.style.TextAlign.Center)
+            Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick={onSection("reminders")}){Text("←",style=MaterialTheme.typography.headlineSmall)};Text("История",style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f),textAlign=androidx.compose.ui.text.style.TextAlign.Center);Spacer(Modifier.width(48.dp))}
             Row{listOf("Все","Выполненные","Пропущенные","Отменённые").forEach{v->FilterChip(selected=filter==v,onClick={filter=v},label={Text(v)})}}
             LazyColumn(Modifier.weight(1f)){items(events.filter{filter=="Все"||historyLabel(it.status)==filter},key={it.id}){h->
                 Row(Modifier.fillMaxWidth().padding(vertical=10.dp)){Text(if(h.status==HistoryEventEntity.COMPLETED)"✓" else if(h.status==HistoryEventEntity.MISSED)"×" else "−",style=MaterialTheme.typography.headlineSmall);Spacer(Modifier.width(12.dp));Column{Text(h.reminderText);Text(format(h.scheduledAt)+"   "+historyLabel(h.status),style=MaterialTheme.typography.bodySmall)}};HorizontalDivider()
@@ -841,8 +850,10 @@ class MainActivity : ComponentActivity(), RecognitionListener {
 
     private fun refresh() {
         Thread {
-            val a = runCatching { AlphaDatabase.get(this).reminders().active() }.getOrDefault(emptyList())
-            runOnUiThread { reminders = a }
+            val dao = AlphaDatabase.get(this).reminders()
+            val a = runCatching { dao.active() }.getOrDefault(emptyList())
+            val all = runCatching { dao.all() }.getOrDefault(emptyList())
+            runOnUiThread { reminders = a; allReminders = all }
         }.start()
     }
 
