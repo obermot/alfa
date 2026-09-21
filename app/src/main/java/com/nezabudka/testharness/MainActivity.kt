@@ -24,6 +24,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
@@ -90,6 +92,9 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         var selected by remember { mutableStateOf<ReminderEntity?>(null) }
         var section by remember { mutableStateOf("reminders") }
         var scheduleFor by remember { mutableStateOf<ReminderEntity?>(null) }
+        BackHandler(enabled = scheduleFor != null || selected != null || section != "reminders") {
+            when { scheduleFor != null -> scheduleFor = null; selected != null -> selected = null; else -> section = "reminders" }
+        }
 
         MaterialTheme {
             Surface(Modifier.fillMaxSize()) {
@@ -134,7 +139,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         section: String, onSection: (String) -> Unit
     ) {
         Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp)) {
-            Text("🌼  Незабудка", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+            Text("✿  Незабудка", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF006BFF))
             Text("Ваши напоминания", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(18.dp))
             Text(if (userName.isBlank()) "Что вам напомнить?" else "$userName,\nчто вам напомнить?", style = MaterialTheme.typography.headlineSmall)
@@ -172,8 +177,8 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                 Text(r.text, style=MaterialTheme.typography.titleMedium)
                 Text(format(r.dueAt), style=MaterialTheme.typography.bodySmall)
             }
-            Switch(checked=r.active,onCheckedChange={toggleReminder(r,it)})
-            TextButton(onClick={deleteReminder(r)}){Text("🗑")}
+            Switch(checked=r.active,onCheckedChange={setReminderEnabled(r,it)})
+            TextButton(onClick={deleteReminder(r)}){Text("▥", color=Color.Red)}
         }
         HorizontalDivider()
     }
@@ -235,15 +240,22 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     @Composable
     private fun SettingsScreen(section:String,onSection:(String)->Unit) {
         var volume by remember { mutableFloatStateOf(prefs.getFloat("reminder_volume",1f)) }
+        var editName by remember { mutableStateOf(false) }
+        var nameDraft by remember { mutableStateOf(userName) }
+        var sound by remember { mutableStateOf(prefs.getString("reminder_sound","Стандартный") ?: "Стандартный") }
+        var dnd by remember { mutableStateOf(prefs.getBoolean("dnd_enabled",false)) }
+        var about by remember { mutableStateOf(false) }
+        if(editName) AlertDialog(onDismissRequest={editName=false},title={Text("Как к вам обращаться?")},text={OutlinedTextField(value=nameDraft,onValueChange={nameDraft=it},singleLine=true)},confirmButton={Button(onClick={userName=nameDraft.trim();prefs.edit().putString("user_name",userName).apply();editName=false}){Text("Сохранить")}},dismissButton={TextButton(onClick={editName=false}){Text("Отмена")}})
+        if(about) AlertDialog(onDismissRequest={about=false},title={Text("Незабудка")},text={Text("Версия 0.2.8\nПриложение голосовых и текстовых напоминаний.")},confirmButton={TextButton(onClick={about=false}){Text("ОК")}})
         Column(Modifier.fillMaxSize().padding(18.dp)) {
-            Text("Настройки",style=MaterialTheme.typography.titleLarge,modifier=Modifier.fillMaxWidth(),textAlign=androidx.compose.ui.text.style.TextAlign.Center)
-            EditorLine("♙","Как к вам обращаться?",userName.ifBlank{"Не задано"},{})
+            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick={onSection("reminders")}){Text("←",color=Color(0xFF006BFF))};Text("Настройки",style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f),textAlign=androidx.compose.ui.text.style.TextAlign.Center);Spacer(Modifier.width(48.dp))}
+            EditorLine("♙","Как к вам обращаться?",userName.ifBlank{"Не задано"},{editName=true})
             Text("🔔   Громкость напоминаний");Slider(value=volume,onValueChange={volume=it;prefs.edit().putFloat("reminder_volume",it).apply()})
-            EditorLine("♫","Звук напоминания","Стандартный",{})
-            EditorLine("☾","Не беспокоить","22:00 – 07:00",{})
+            EditorLine("♫","Звук напоминания",sound,{sound=if(sound=="Стандартный")"Мягкий" else "Стандартный";prefs.edit().putString("reminder_sound",sound).apply()})
+            EditorLine("☾","Не беспокоить",if(dnd)"22:00 – 07:00" else "Выключено",{dnd=!dnd;prefs.edit().putBoolean("dnd_enabled",dnd).apply()})
             EditorLine("◎","Язык","Русский",{})
             EditorLine("◉","Тема оформления","Светлая",{})
-            EditorLine("ⓘ","О приложении","",{})
+            EditorLine("ⓘ","О приложении","",{about=true})
             Spacer(Modifier.weight(1f));BottomNav(section,onSection)
         }
     }
@@ -290,12 +302,18 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         }
     }
 
-    private fun toggleReminder(r:ReminderEntity,active:Boolean) {
+    private fun setReminderEnabled(r:ReminderEntity,active:Boolean) {
         Thread {
             val dao=AlphaDatabase.get(this).reminders()
-            val updated=r.copy(active=active)
+            val now=System.currentTimeMillis()
+            var due=r.dueAt
+            if(active && due <= now && r.recurrenceMinutes != null) {
+                val step=r.recurrenceMinutes*60_000L
+                while(due<=now) due+=step
+            }
+            val updated=r.copy(active=active,dueAt=due,lastFiredAt=null,acknowledged=false)
             dao.update(updated)
-            if(active) ReminderScheduler.schedule(this,updated) else ReminderScheduler.cancel(this,r.id)
+            if(active && due>now) ReminderScheduler.schedule(this,updated) else ReminderScheduler.cancel(this,r.id)
             runOnUiThread{refresh()}
         }.start()
     }

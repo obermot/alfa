@@ -60,7 +60,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             if (intent?.action != ACTION_BEGIN_LISTEN) return
             val id = intent.getLongExtra(EXTRA_REMINDER_ID, 0L)
             if (id != reminderId || id <= 0L) return
-            if (isQuestionReady()) scheduleReadyListen(900L) else handler.postDelayed({ if (!closing) { markReadyLocally(); scheduleReadyListen(150L) } }, 4200L)
+            markReadyLocally(); scheduleReadyListen(350L)
         }
     }
 
@@ -86,7 +86,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
                         Spacer(Modifier.weight(1f))
                         Text(
                             text = buildString {
-                                if (name.isNotBlank()) append(name).append(",\n")
+                                if (name.isNotBlank()) append(name).append(",\\n")
                                 append("пора ").append(reminderText.ifBlank { "выполнить напоминание" }.lowercase())
                             },
                             style = MaterialTheme.typography.headlineMedium,
@@ -154,7 +154,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             }
             receiverRegistered = true
         }
-        scheduleReadyListen(450L)
+        handler.postDelayed({ if (!closing) { markReadyLocally(); scheduleReadyListen(150L) } }, 650L)
     }
 
     private fun refreshReminderState() {
@@ -214,12 +214,13 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
     private fun startListeningForAnswer() {
         if (closing) return
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            status = "Нет доступа к микрофону. Нажмите «Да, я услышал»."
+            status = "Нет доступа к микрофону."
             return
         }
         stopListening()
-        if (modelDir().exists() && !modelDir().list().isNullOrEmpty()) startVoskListening()
-        else startSystemListening()
+        if (SpeechRecognizer.isRecognitionAvailable(this)) startSystemListening()
+        else if (modelDir().exists() && !modelDir().list().isNullOrEmpty()) startVoskListening()
+        else status = "Голосовой ответ недоступен"
     }
 
     private fun startVoskListening() {
@@ -245,7 +246,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
                         runOnUiThread {
                             if (closing) return@runOnUiThread
                             if (isAcknowledgement(heard)) acknowledgeWithFeedback()
-                            else status = "Не поняла: «$heard». Скажите «услышал» или нажмите кнопку."
+                            else status = "Не поняла: «$heard». Скажите «услышал»."
                         }
                     }
 
@@ -255,7 +256,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
                             stopVosk()
                             if (closing) return@runOnUiThread
                             if (heard.isBlank()) {
-                                status = "Не расслышала. Нажмите «Ответить голосом» и повторите."
+                                status = "Не расслышала. Повторите ответ."
                             } else if (isAcknowledgement(heard)) {
                                 acknowledgeWithFeedback()
                             } else {
@@ -271,7 +272,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
                     override fun onTimeout() {
                         runOnUiThread {
                             stopVosk()
-                            if (!closing) status = "Не расслышала. Нажмите «Ответить голосом» и повторите."
+                            if (!closing) status = "Не расслышала. Повторите ответ."
                         }
                     }
                 })
@@ -284,7 +285,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
     private fun startSystemListening() {
         if (closing) return
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            status = "Голосовой ответ недоступен. Используйте кнопку."
+            status = "Голосовой ответ недоступен."
             return
         }
         stopSystemRecognizer()
@@ -301,7 +302,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
         runCatching { systemRecognizer?.startListening(speechIntent) }
             .onFailure {
                 stopSystemRecognizer()
-                status = "Не удалось включить микрофон. Нажмите «Ответить голосом»."
+                status = "Не удалось включить микрофон."
             }
     }
 
@@ -414,7 +415,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             acknowledgeWithFeedback()
         } else {
             status = if (candidates.isEmpty()) "Не расслышала. Нажмите «Ответить голосом» и повторите."
-            else "Не поняла: «${candidates.first()}». Скажите «услышал» или нажмите кнопку."
+            else "Не поняла: «${candidates.first()}». Скажите «услышал»."
         }
     }
 
