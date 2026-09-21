@@ -10,6 +10,7 @@
         android:theme="@style/Theme.NezabudkaTest"
         android:label="Незабудка"
         android:allowBackup="false">
+        <activity android:name=".SnoozeActivity" android:exported="false" />
         <activity
             android:name=".AlarmActivity"
             android:exported="false"

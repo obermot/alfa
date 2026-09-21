@@ -24,9 +24,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -58,7 +60,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             if (intent?.action != ACTION_BEGIN_LISTEN) return
             val id = intent.getLongExtra(EXTRA_REMINDER_ID, 0L)
             if (id != reminderId || id <= 0L) return
-            scheduleReadyListen(450L)
+            if (isQuestionReady()) scheduleReadyListen(900L) else handler.postDelayed({ if (!closing) { markReadyLocally(); scheduleReadyListen(150L) } }, 4200L)
         }
     }
 
@@ -71,56 +73,53 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
         applyIntent(intent)
 
         setContent {
+            val name = getSharedPreferences("nezabudka_user", MODE_PRIVATE).getString("user_name", "").orEmpty().trim()
             MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceVariant) {
                     Column(
                         modifier = Modifier.fillMaxSize().padding(24.dp),
                         verticalArrangement = Arrangement.Center
                     ) {
+                        TextButton(onClick = { acknowledgeWithFeedback() }, modifier = Modifier.align(androidx.compose.ui.Alignment.End)) {
+                            Text("×", style = MaterialTheme.typography.headlineLarge)
+                        }
+                        Spacer(Modifier.weight(1f))
                         Text(
-                            text = "Незабудка",
-                            style = MaterialTheme.typography.headlineLarge,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(Modifier.height(24.dp))
-                        Text(
-                            text = reminderText.ifBlank { "Напоминание" },
+                            text = buildString {
+                                if (name.isNotBlank()) append(name).append(",\n")
+                                append("пора ").append(reminderText.ifBlank { "выполнить напоминание" }.lowercase())
+                            },
                             style = MaterialTheme.typography.headlineMedium,
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = TextAlign.Center
                         )
-                        Spacer(Modifier.height(20.dp))
-                        Text(
-                            text = status,
-                            style = if (closing) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(Modifier.height(32.dp))
+                        Spacer(Modifier.height(36.dp))
                         Button(
                             onClick = {
-                                markReadyLocally()
-                                autoRetryCount = 0
-                                scheduleReadyListen(150L)
+                                clearReadyFlag()
+                                stopListening()
+                                startActivity(Intent(this@AlarmActivity, SnoozeActivity::class.java).putExtra("reminder_id", reminderId))
+                                finishAndRemoveTask()
                             },
                             enabled = !closing,
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("Ответить голосом") }
-                        Spacer(Modifier.height(12.dp))
+                            modifier = Modifier.fillMaxWidth().height(58.dp)
+                        ) { Text("↻   Напомнить снова") }
+                        Spacer(Modifier.height(14.dp))
                         Button(
-                            onClick = { acknowledgeWithFeedback() },
+                            onClick = { deleteReminder() },
                             enabled = !closing,
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("Да, я услышал") }
-                        if (repeatMinutes > 0) {
-                            Spacer(Modifier.height(12.dp))
-                            Button(
-                                onClick = { snooze() },
-                                enabled = !closing,
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text(ReminderRepeatSettings.label(repeatMinutes)) }
+                            modifier = Modifier.fillMaxWidth().height(58.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) { Text("▣   Удалить напоминание") }
+                        Spacer(Modifier.height(18.dp))
+                        if (status.startsWith("Слышу") || status.startsWith("Слушаю") || status.startsWith("Не ")) {
+                            Text(status, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                         }
+                        Spacer(Modifier.weight(1f))
+                        Text("Смахните вверх, чтобы закрыть", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                     }
                 }
             }
@@ -338,6 +337,25 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             )
         }
         handler.postDelayed({ finishAndRemoveTask() }, 1200L)
+    }
+
+    private fun deleteReminder() {
+        if (closing) return
+        closing = true
+        clearReadyFlag()
+        stopListening()
+        val id = reminderId
+        Thread {
+            val db = AlphaDatabase.get(this)
+            val r = db.reminders().get(id)
+            if (r != null) {
+                ReminderScheduler.cancel(this, id)
+                db.history().insert(HistoryEventEntity(reminderId=r.id, reminderText=r.text, scheduledAt=r.originalDueAt, status=HistoryEventEntity.CANCELLED))
+                db.reminders().delete(r)
+                ReminderNotifications.cancel(this, id)
+            }
+            runOnUiThread { finishAndRemoveTask() }
+        }.start()
     }
 
     private fun snooze() {
