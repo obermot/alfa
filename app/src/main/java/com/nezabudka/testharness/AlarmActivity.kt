@@ -29,6 +29,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -47,6 +50,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
     private var status by mutableStateOf("Напоминание")
     private var repeatMinutes by mutableStateOf(0)
     private var closing by mutableStateOf(false)
+    private var confirmDelete by mutableStateOf(false)
 
     private var systemRecognizer: SpeechRecognizer? = null
     private var voskModel: Model? = null
@@ -75,14 +79,13 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
         setContent {
             val name = getSharedPreferences("nezabudka_user", MODE_PRIVATE).getString("user_name", "").orEmpty().trim()
             MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceVariant) {
+                if(confirmDelete) AlertDialog(onDismissRequest={confirmDelete=false},title={Text("Удалить это напоминание?")},text={Text("Оно больше не будет появляться.")},confirmButton={Button(onClick={confirmDelete=false;deleteReminder()},colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.error)){Text("Удалить")}},dismissButton={OutlinedButton(onClick={confirmDelete=false}){Text("Отмена")}})
+                Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF152238)) {
                     Column(
                         modifier = Modifier.fillMaxSize().padding(24.dp),
                         verticalArrangement = Arrangement.Center
                     ) {
-                        TextButton(onClick = { acknowledgeWithFeedback() }, modifier = Modifier.align(androidx.compose.ui.Alignment.End)) {
-                            Text("×", style = MaterialTheme.typography.headlineLarge)
-                        }
+                        TextButton(onClick = { closeCurrentSignal() }, modifier = Modifier.align(androidx.compose.ui.Alignment.End)) { Text("×", style = MaterialTheme.typography.headlineLarge, color=Color.White) }
                         Spacer(Modifier.weight(1f))
                         Text(
                             text = buildString {
@@ -91,7 +94,8 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
                             },
                             style = MaterialTheme.typography.headlineMedium,
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
+                            color = Color.White
                         )
                         Spacer(Modifier.height(36.dp))
                         Button(
@@ -106,7 +110,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
                         ) { Text("↻   Напомнить снова") }
                         Spacer(Modifier.height(14.dp))
                         Button(
-                            onClick = { deleteReminder() },
+                            onClick = { confirmDelete=true },
                             enabled = !closing,
                             modifier = Modifier.fillMaxWidth().height(58.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -119,7 +123,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
                             Text(status, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                         }
                         Spacer(Modifier.weight(1f))
-                        Text("Смахните вверх, чтобы закрыть", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                        Text("Смахните вверх, чтобы закрыть", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, color=Color.White)
                     }
                 }
             }
@@ -321,6 +325,13 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
 
     private fun clearReadyFlag() {
         if (reminderId > 0L) readyPrefs().edit().remove(reminderId.toString()).apply()
+    }
+
+    private fun closeCurrentSignal() {
+        if(closing) return
+        closing=true;clearReadyFlag();stopListening()
+        ReminderNotifications.cancel(this,reminderId)
+        finishAndRemoveTask()
     }
 
     private fun acknowledgeWithFeedback() {
