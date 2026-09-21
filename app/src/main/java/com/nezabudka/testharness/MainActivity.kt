@@ -398,23 +398,18 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     private fun SettingsScreen(section:String,onSection:(String)->Unit) {
         var volume by remember { mutableFloatStateOf(prefs.getFloat("reminder_volume",1f)) }
         var editName by remember { mutableStateOf(false) };var nameDraft by remember { mutableStateOf(userName) }
-        var dnd by remember { mutableStateOf(prefs.getBoolean("dnd_enabled",false)) }
-        var dndTime by remember { mutableStateOf(false) }
-        var startH by remember { mutableIntStateOf(prefs.getInt("dnd_start_h",22)) };var startM by remember { mutableIntStateOf(prefs.getInt("dnd_start_m",0)) }
-        var endH by remember { mutableIntStateOf(prefs.getInt("dnd_end_h",7)) };var endM by remember { mutableIntStateOf(prefs.getInt("dnd_end_m",0)) }
         var language by remember { mutableStateOf(prefs.getString("language","Русский")?:"Русский") };var languageDialog by remember{mutableStateOf(false)}
         var melodyTitle by remember { mutableStateOf(prefs.getString("melody_title","Стандартная")?:"Стандартная") }
         var about by remember { mutableStateOf(false) }
+        var voiceInput by remember { mutableStateOf(prefs.getBoolean("voice_input_enabled",true)) }
+        var permissions by remember { mutableStateOf(false) }
         val melodyPicker=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){result->
             val uri=if(Build.VERSION.SDK_INT>=33) result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI,Uri::class.java) else @Suppress("DEPRECATION") result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
             if(uri!=null){melodyTitle=runCatching{RingtoneManager.getRingtone(this@MainActivity,uri)?.getTitle(this@MainActivity)}.getOrNull()?:"Выбранная";prefs.edit().putString("melody_uri",uri.toString()).putString("melody_title",melodyTitle).apply()}
         }
         if(editName) AlertDialog(onDismissRequest={editName=false},title={Text("Как к вам обращаться?")},text={OutlinedTextField(value=nameDraft,onValueChange={nameDraft=it},singleLine=true)},confirmButton={Button(onClick={userName=nameDraft.trim();prefs.edit().putString("user_name",userName).apply();editName=false},colors=ButtonDefaults.buttonColors(containerColor=canonicalBlue)){Text("Сохранить")}},dismissButton={TextButton(onClick={editName=false}){Text("Отмена")}})
         if(languageDialog) AlertDialog(onDismissRequest={languageDialog=false},title={Text("Язык")},text={Column{listOf("Русский","Українська","English","Español").forEach{v->TextButton(onClick={language=v;prefs.edit().putString("language",v).apply();languageDialog=false},modifier=Modifier.fillMaxWidth()){Text(v,modifier=Modifier.fillMaxWidth())}}}},confirmButton={})
-        if(dndTime) AlertDialog(onDismissRequest={dndTime=false},title={Text("Не беспокоить")},text={Column{
-            Text("С");Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=23;value=startH;setOnValueChangedListener{_,_,v->startH=v}}});AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=59;value=startM;setOnValueChangedListener{_,_,v->startM=v}}})}
-            Text("До");Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=23;value=endH;setOnValueChangedListener{_,_,v->endH=v}}});AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=59;value=endM;setOnValueChangedListener{_,_,v->endM=v}}})}
-        }},confirmButton={Button(onClick={prefs.edit().putInt("dnd_start_h",startH).putInt("dnd_start_m",startM).putInt("dnd_end_h",endH).putInt("dnd_end_m",endM).putBoolean("dnd_enabled",true).apply();dnd=true;dndTime=false},colors=ButtonDefaults.buttonColors(containerColor=canonicalBlue)){Text("Готово")}},dismissButton={TextButton(onClick={dndTime=false}){Text("Отмена")}})
+        if(permissions) AlertDialog(onDismissRequest={permissions=false},title={Text("Разрешения")},text={Text("Микрофон: "+if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)"разрешён" else "не разрешён")+"\nУведомления: "+if(Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED)"разрешены" else "не разрешены")},confirmButton={TextButton(onClick={permissions=false}){Text("ОК")}})
         if(about) AlertDialog(onDismissRequest={about=false},title={Text("Незабудка")},text={Text("Версия 0.3.0\nПриложение голосовых и текстовых напоминаний.")},confirmButton={TextButton(onClick={about=false}){Text("ОК")}})
         Column(Modifier.fillMaxSize().padding(18.dp)) {
             Row(verticalAlignment=Alignment.CenterVertically){BackButton{onSection("reminders")};Text("Настройки",style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f),textAlign=androidx.compose.ui.text.style.TextAlign.Center,color=canonicalDarkBlue);Spacer(Modifier.width(42.dp))}
@@ -424,10 +419,10 @@ class MainActivity : ComponentActivity(), RecognitionListener {
             EditorLine(Icons.Filled.MusicNote,"Мелодия",melodyTitle){
                 melodyPicker.launch(Intent(RingtoneManager.ACTION_RINGTONE_PICKER).putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE,RingtoneManager.TYPE_ALARM).putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT,false))
             }
-            Row(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Filled.DarkMode,contentDescription=null,tint=canonicalDarkBlue,modifier=Modifier.size(30.dp));Spacer(Modifier.width(12.dp));Column(Modifier.weight(1f)){Text("Не беспокоить",color=canonicalDarkBlue);Text(if(dnd)String.format("%02d:%02d – %02d:%02d",startH,startM,endH,endM)else"Выключено",color=Color(0xFF59618F))};IconButton(onClick={dndTime=true}){Icon(Icons.Filled.ChevronRight,contentDescription="Изменить",tint=canonicalDarkBlue)};Switch(checked=dnd,onCheckedChange={dnd=it;prefs.edit().putBoolean("dnd_enabled",it).apply()},colors=SwitchDefaults.colors(checkedTrackColor=canonicalBlue))}
-            HorizontalDivider(color=Color(0xFFE7EAF0))
+            EditorLine(Icons.Filled.Mic,"Голосовой ввод",if(voiceInput)"Включен" else "Выключен"){voiceInput=!voiceInput;prefs.edit().putBoolean("voice_input_enabled",voiceInput).apply()}
             EditorLine(Icons.Filled.Language,"Язык",language,{languageDialog=true})
             EditorLine(Icons.Filled.Palette,"Тема оформления","Светлая",{})
+            EditorLine(Icons.Filled.Security,"Разрешения","",{permissions=true})
             EditorLine(Icons.Outlined.Info,"О приложении","",{about=true})
             Spacer(Modifier.weight(1f));BottomNav(section,onSection)
         }
