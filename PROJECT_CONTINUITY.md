@@ -189,3 +189,11 @@ Repository Secrets:
 - Return to the user only with a concrete result or when a genuine user action / authorial decision is required.
 - Routine engineering choices, intermediate states, compilation failures that can be diagnosed, and ordinary retries are not reasons to interrupt the user.
 - Before each project action, re-apply this rule together with the permanent GitHub/Actions efficiency rule.
+
+## Handoff-first / no-eye-balling rule (2026-09-21)
+
+- For every continued project task, first re-read and follow the current handoff and its referenced canonical materials before making implementation or visual decisions.
+- If the handoff provides a link, file, image, mockup, repository path, or other reference, use that reference directly whenever it is accessible; do not replace it with memory, approximation, reconstruction, or an independently invented interpretation.
+- Never implement approved UI “by eye” from a prose summary when the canonical visual reference exists. The approved visual reference and handoff are the implementation source of truth, subject only to a later explicit user instruction.
+- If a referenced source is genuinely inaccessible, do not guess from it: use the remaining canonical materials and obtain the missing source before making decisions that depend on it.
+- Re-apply this rule before each project action together with the execution-turn continuity rule.
