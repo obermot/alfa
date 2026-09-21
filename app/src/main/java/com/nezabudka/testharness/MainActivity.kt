@@ -309,9 +309,19 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     private fun ScheduleScreen(reminder:ReminderEntity,onBack:()->Unit) {
         var daily by remember { mutableStateOf(reminder.recurrenceMinutes==1440L) }
         val initial = Instant.ofEpochMilli(reminder.dueAt).atZone(ZoneId.systemDefault())
+        val restoredDates = remember(reminder.id, reminder.dueAt) {
+            linkedMapOf(initial.toLocalDate() to initial.toLocalTime().withSecond(0).withNano(0)).apply {
+                prefs.getString("extra_dates_${reminder.id}", "").orEmpty().split(";").filter { it.contains("|") }.forEach { item ->
+                    runCatching {
+                        val p=item.split("|"); val d=LocalDate.parse(p[0]); val hm=p[1].split(":")
+                        put(d,LocalTime.of(hm[0].toInt(),hm[1].toInt()))
+                    }
+                }
+            }
+        }
         var month by remember { mutableStateOf(java.time.YearMonth.from(initial)) }
-        var selectedDates by remember { mutableStateOf(linkedSetOf(initial.toLocalDate())) }
-        var times by remember { mutableStateOf(mapOf(initial.toLocalDate() to initial.toLocalTime().withSecond(0).withNano(0))) }
+        var selectedDates by remember { mutableStateOf(LinkedHashSet(restoredDates.keys)) }
+        var times by remember { mutableStateOf(restoredDates.toMap()) }
         var editingDate by remember { mutableStateOf<LocalDate?>(null) }
         var editAll by remember { mutableStateOf(false) }
         var hour by remember { mutableIntStateOf(initial.hour) }
