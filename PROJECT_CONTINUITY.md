@@ -181,3 +181,11 @@ Repository Secrets:
 - последний фактический тест пользователя и следующий незавершённый шаг.
 
 Существенные новые решения и результаты тестов нельзя оставлять только в памяти чата — их нужно записывать сюда или в другой явно связанный долговечный проектный артефакт.
+
+## Execution-turn continuity rule (2026-09-21)
+
+- When the user says to continue an approved project task, do not end the turn with a mere intermediate status such as “continuing”.
+- Use the entire available execution turn to advance the work through as many non-blocked steps as practical: inspect, edit, commit, build, read failures, fix, rebuild, and verify.
+- Return to the user only with a concrete result or when a genuine user action / authorial decision is required.
+- Routine engineering choices, intermediate states, compilation failures that can be diagnosed, and ordinary retries are not reasons to interrupt the user.
+- Before each project action, re-apply this rule together with the permanent GitHub/Actions efficiency rule.
