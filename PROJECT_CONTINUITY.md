@@ -14,7 +14,7 @@
 - Android applicationId: `com.nezabudka.alpha.clean013`.
 - Последняя полностью подтверждённая стабильная телефонная база: `0.2.5-per-reminder-controls-alpha`, versionCode `115`.
 - Последняя протестированная пользователем UI-сборка: `0.2.8-phone-test-fixes`, versionCode `118`; она не считается стабильной, её фактические дефекты перечислены в `TEST_HISTORY.md`.
-- Текущий исправительный пакет разработки: `0.2.9-phone-test-batch`, versionCode `119`.
+- Последняя собранная исправительная UI-версия: `0.3.0-canonical-visual-pass`, versionCode `120`; GitHub Actions main run 28 успешно собрал подписанный APK. Поведение на физическом устройстве ещё требует подтверждения пользователя.
 - Базовый путь создания напоминаний восстановлен из проверенной линии 0.1.5 и подтверждён пользователем.
 - APK тестируется на физическом Android-смартфоне.
 - Фактическая полевая история версий и дефектов ведётся в `TEST_HISTORY.md`.
@@ -209,3 +209,11 @@ Repository Secrets:
 - A reminder disabled by its switch remains stored and visible; only the trash/delete flow deletes it.
 - Settings expose four languages: Русский / Українська / English / Español. DND interval must be editable.
 - Alarm Screen №6 and canonical delete confirmation are mandatory testable flows.
+
+
+## Canonical visual source recovered (2026-09-22)
+
+- Перед проходом 0.3.0 повторно открыт фактический утверждённый overall mockup из conversation files; реализация сверялась непосредственно с ним.
+- Для пиктограмм выбран официальный Google Material Icons / Material Symbols подход (Apache-2.0), а не emoji/text substitutes.
+- Светлая каноническая палитра: белый фон, насыщенный синий для primary controls/selected state, тёмно-синий для основного текста, светло-синий для secondary surfaces, красный для delete.
+- Тёмную тему не разрабатывать до отдельного решения пользователя после утверждения светлого дизайна.
