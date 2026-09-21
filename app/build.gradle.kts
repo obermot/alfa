@@ -13,8 +13,8 @@ android {
         applicationId = "com.nezabudka.alpha.clean013"
         minSdk = 26
         targetSdk = 36
-        versionCode = 120
-        versionName = "0.3.0-canonical-visual-pass"
+        versionCode = 121
+        versionName = "0.3.1-canonical-mockup-v2"
     }
 
     val signingStorePath = System.getenv("NEZABUDKA_SIGNING_STORE_PATH")
