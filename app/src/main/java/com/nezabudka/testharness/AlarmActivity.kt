@@ -86,8 +86,7 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
                         Spacer(Modifier.weight(1f))
                         Text(
                             text = buildString {
-                                if (name.isNotBlank()) append(name).append(",
-")
+                                if (name.isNotBlank()) append(name).append(",\\n")
                                 append("пора ").append(reminderText.ifBlank { "выполнить напоминание" }.lowercase())
                             },
                             style = MaterialTheme.typography.headlineMedium,
