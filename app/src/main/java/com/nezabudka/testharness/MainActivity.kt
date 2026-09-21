@@ -223,18 +223,78 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     @Composable
     private fun ScheduleScreen(reminder:ReminderEntity,onBack:()->Unit) {
         var daily by remember { mutableStateOf(reminder.recurrenceMinutes==1440L) }
-        val picker=rememberDatePickerState(initialSelectedDateMillis=reminder.dueAt)
+        val initial = Instant.ofEpochMilli(reminder.dueAt).atZone(ZoneId.systemDefault())
+        var month by remember { mutableStateOf(java.time.YearMonth.from(initial)) }
+        var selectedDates by remember { mutableStateOf(linkedSetOf(initial.toLocalDate())) }
+        var times by remember { mutableStateOf(mapOf(initial.toLocalDate() to initial.toLocalTime().withSecond(0).withNano(0))) }
+        var editingDate by remember { mutableStateOf<LocalDate?>(null) }
+        var editAll by remember { mutableStateOf(false) }
+        var hour by remember { mutableIntStateOf(initial.hour) }
+        var minute by remember { mutableIntStateOf(initial.minute) }
+
+        fun openTime(date:LocalDate?, all:Boolean=false) {
+            editingDate=date; editAll=all
+            val t=if(all) times.values.firstOrNull() ?: initial.toLocalTime() else times[date] ?: initial.toLocalTime()
+            hour=t.hour;minute=t.minute
+        }
+        if(editingDate!=null || editAll) AlertDialog(
+            onDismissRequest={editingDate=null;editAll=false},
+            title={Text(if(editAll)"Изменить время для всех" else "Время")},
+            text={Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
+                AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=23;value=hour;setOnValueChangedListener{_,_,v->hour=v}}})
+                Text(":",style=MaterialTheme.typography.headlineMedium)
+                AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=59;value=minute;setFormatter{String.format("%02d",it)};setOnValueChangedListener{_,_,v->minute=v}}})
+            }},
+            confirmButton={Button(onClick={
+                val t=LocalTime.of(hour,minute)
+                times=if(editAll) selectedDates.associateWith{t} else times+(editingDate!! to t)
+                editingDate=null;editAll=false
+            }){Text("Готово")}},
+            dismissButton={TextButton(onClick={editingDate=null;editAll=false}){Text("Отмена")}}
+        )
+
         Column(Modifier.fillMaxSize().padding(18.dp)) {
-            TextButton(onClick=onBack){Text("←")}
+            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick=onBack){Text("←",style=MaterialTheme.typography.headlineSmall)};Text("Повторять напоминание?",style=MaterialTheme.typography.titleLarge)}
             Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){RadioButton(selected=daily,onClick={daily=true});Text("Каждый день")}
             Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){RadioButton(selected=!daily,onClick={daily=false});Text("Выбрать дату и время")}
-            if(!daily) DatePicker(state=picker,showModeToggle=false)
-            Spacer(Modifier.weight(1f))
+            if(!daily) {
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
+                    TextButton(onClick={month=month.minusMonths(1)}){Text("‹")}
+                    Text(month.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru"))).replaceFirstChar{it.titlecase(Locale("ru"))},style=MaterialTheme.typography.titleMedium)
+                    TextButton(onClick={month=month.plusMonths(1)}){Text("›")}
+                }
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceAround){listOf("Пн","Вт","Ср","Чт","Пт","Сб","Вс").forEach{Text(it,style=MaterialTheme.typography.labelSmall)}}
+                val first=month.atDay(1);val offset=first.dayOfWeek.value-1;val days=month.lengthOfMonth()
+                for(week in 0..5){
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceAround){
+                        for(dow in 0..6){
+                            val day=week*7+dow-offset+1
+                            if(day in 1..days){
+                                val date=month.atDay(day);val chosen=date in selectedDates
+                                TextButton(onClick={
+                                    selectedDates=LinkedHashSet(selectedDates).apply{if(chosen) remove(date) else add(date)}
+                                    if(!chosen && times[date]==null) times=times+(date to initial.toLocalTime().withSecond(0).withNano(0))
+                                },modifier=Modifier.size(42.dp),colors=ButtonDefaults.textButtonColors(containerColor=if(chosen) Color(0xFF006BFF) else Color.Transparent,contentColor=if(chosen) Color.White else MaterialTheme.colorScheme.onSurface)){Text(day.toString())}
+                            } else Spacer(Modifier.size(42.dp))
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){Text("Выбранные даты и время",style=MaterialTheme.typography.titleMedium);TextButton(onClick={if(selectedDates.isNotEmpty())openTime(null,true)}){Text("Изменить все")}}
+                LazyColumn(Modifier.weight(1f,false)){
+                    items(selectedDates.sorted(),key={it.toEpochDay()}){date->
+                        Row(Modifier.fillMaxWidth().padding(vertical=4.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
+                            Text(date.format(DateTimeFormatter.ofPattern("d MMMM",Locale("ru"))),modifier=Modifier.weight(1f))
+                            OutlinedButton(onClick={openTime(date)}){Text((times[date]?:initial.toLocalTime()).format(DateTimeFormatter.ofPattern("HH:mm")))}
+                            TextButton(onClick={selectedDates=LinkedHashSet(selectedDates).apply{remove(date)};times=times-date}){Text("⋮",style=MaterialTheme.typography.headlineSmall)}
+                        }
+                    }
+                }
+                TextButton(onClick={val d=(selectedDates.maxOrNull()?:month.atDay(1)).plusDays(1);selectedDates=LinkedHashSet(selectedDates).apply{add(d)};times=times+(d to initial.toLocalTime().withSecond(0).withNano(0));month=java.time.YearMonth.from(d)}){Text("+  Добавить дату")}
+            } else Spacer(Modifier.weight(1f))
             Button(onClick={
-                val selected=picker.selectedDateMillis
-                updateSchedule(reminder,daily,selected)
-                onBack()
-            },modifier=Modifier.fillMaxWidth().height(54.dp)){Text("Готово")}
+                val pairs=if(daily) listOf(initial.toLocalDate() to initial.toLocalTime()) else selectedDates.sorted().map{it to (times[it]?:initial.toLocalTime())}
+                updateScheduleDates(reminder,daily,pairs);onBack()
+            },enabled=daily||selectedDates.isNotEmpty(),modifier=Modifier.fillMaxWidth().height(54.dp)){Text("Готово")}
         }
     }
 
@@ -336,6 +396,13 @@ class MainActivity : ComponentActivity(), RecognitionListener {
             db.reminders().delete(r)
             runOnUiThread{refresh();status="Напоминание удалено"}
         }.start()
+    }
+
+    private fun updateScheduleDates(r:ReminderEntity,daily:Boolean,dates:List<Pair<LocalDate,LocalTime>>) {
+        val first=dates.minByOrNull{it.first.atTime(it.second)} ?: return
+        val ms=first.first.atTime(first.second).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        updateSchedule(r,daily,ms)
+        prefs.edit().putString("extra_dates_${r.id}",dates.drop(1).joinToString(";"){(d,t)->"${d}|${t.hour}:${t.minute}"}).apply()
     }
 
     private fun updateSchedule(r:ReminderEntity,daily:Boolean,dateMillis:Long?) {
