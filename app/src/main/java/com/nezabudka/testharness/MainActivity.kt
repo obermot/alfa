@@ -103,6 +103,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         var selected by remember { mutableStateOf<ReminderEntity?>(null) }
         var section by remember { mutableStateOf("reminders") }
         var scheduleFor by remember { mutableStateOf<ReminderEntity?>(null) }
+        var scheduleTitle by remember { mutableStateOf("Когда напомнить?") }
         var editTextFor by remember { mutableStateOf<ReminderEntity?>(null) }
         var editNoteFor by remember { mutableStateOf<ReminderEntity?>(null) }
         BackHandler(enabled = scheduleFor != null || editTextFor != null || editNoteFor != null || selected != null || section != "reminders") {
@@ -114,11 +115,12 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                 when {
                     editTextFor != null -> TextEditScreen("Что напомнить?",editTextFor!!.text,{editTextFor=null}){v->updateReminderText(editTextFor!!,v);selected=editTextFor!!.copy(text=v);editTextFor=null}
                     editNoteFor != null -> TextEditScreen("Заметка",prefs.getString("note_${editNoteFor!!.id}","").orEmpty(),{editNoteFor=null}){v->prefs.edit().putString("note_${editNoteFor!!.id}",v).apply();editNoteFor=null}
-                    scheduleFor != null -> ScheduleScreen(scheduleFor!!, onBack = { scheduleFor = null })
+                    scheduleFor != null -> ScheduleScreen(scheduleFor!!, title=scheduleTitle, onBack = { scheduleFor = null })
                     selected != null -> ReminderEditor(
                         reminder = selected!!,
                         onBack = { selected = null },
-                        onSchedule = { scheduleFor = selected },
+                        onWhen = { scheduleTitle="Когда напомнить?"; scheduleFor = selected },
+                        onRepeat = { scheduleTitle="Повторять напоминание?"; scheduleFor = selected },
                         onEditText = { editTextFor = selected },
                         onEditNote = { editNoteFor = selected },
                         onDelete = {
@@ -254,7 +256,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     }
 
     @Composable
-    private fun ReminderEditor(reminder:ReminderEntity,onBack:()->Unit,onSchedule:()->Unit,onEditText:()->Unit,onEditNote:()->Unit,onDelete:()->Unit) {
+    private fun ReminderEditor(reminder:ReminderEntity,onBack:()->Unit,onWhen:()->Unit,onRepeat:()->Unit,onEditText:()->Unit,onEditNote:()->Unit,onDelete:()->Unit) {
         var confirmDelete by remember { mutableStateOf(false) }
         if(confirmDelete) DeleteDialog(onCancel={confirmDelete=false},onDelete=onDelete)
         Column(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
@@ -265,8 +267,8 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                 Spacer(Modifier.width(12.dp));Text(reminder.text,style=MaterialTheme.typography.titleLarge,color=canonicalDarkBlue)
             }
             EditorLine(Icons.Outlined.ChatBubbleOutline,"Что напомнить?",reminder.text,onEditText)
-            EditorLine(Icons.Outlined.DateRange,"Когда напомнить?",format(reminder.dueAt),onSchedule)
-            EditorLine(Icons.Filled.Repeat,"Повторять напоминание?",if(reminder.recurrenceMinutes==1440L)"Каждый день" else "Не задано",onSchedule)
+            EditorLine(Icons.Outlined.DateRange,"Когда напомнить?",format(reminder.dueAt),onWhen)
+            EditorLine(Icons.Filled.Repeat,"Повторять напоминание?",if(reminder.recurrenceMinutes==1440L)"Каждый день" else "Не задано",onRepeat)
             var localVolume by remember { mutableFloatStateOf(prefs.getFloat("volume_${reminder.id}",prefs.getFloat("reminder_volume",1f))) }
             Row(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically){
                 Icon(Icons.Filled.VolumeUp,contentDescription=null,tint=canonicalDarkBlue,modifier=Modifier.size(30.dp));Spacer(Modifier.width(12.dp))
@@ -306,7 +308,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     }
 
     @Composable
-    private fun ScheduleScreen(reminder:ReminderEntity,onBack:()->Unit) {
+    private fun ScheduleScreen(reminder:ReminderEntity,title:String,onBack:()->Unit) {
         var daily by remember { mutableStateOf(reminder.recurrenceMinutes==1440L) }
         val initial = Instant.ofEpochMilli(reminder.dueAt).atZone(ZoneId.systemDefault())
         val restoredDates = remember(reminder.id, reminder.dueAt) {
@@ -349,7 +351,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         )
 
         Column(Modifier.fillMaxSize().padding(18.dp)) {
-            Row(verticalAlignment=Alignment.CenterVertically){BackButton(onBack);Spacer(Modifier.width(10.dp));Text("Повторять напоминание?",style=MaterialTheme.typography.titleLarge,color=canonicalDarkBlue)}
+            Row(verticalAlignment=Alignment.CenterVertically){BackButton(onBack);Spacer(Modifier.width(10.dp));Text(title,style=MaterialTheme.typography.titleLarge,color=canonicalDarkBlue)}
             Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){RadioButton(selected=daily,onClick={daily=true});Text("Каждый день")}
             Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){RadioButton(selected=!daily,onClick={daily=false});Text("Выбрать дату и время")}
             if(!daily) {
@@ -384,7 +386,6 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                         }
                     }
                 }
-                TextButton(onClick={val d=(selectedDates.maxOrNull()?:month.atDay(1)).plusDays(1);selectedDates=LinkedHashSet(selectedDates).apply{add(d)};times=times+(d to initial.toLocalTime().withSecond(0).withNano(0));month=java.time.YearMonth.from(d)}){Icon(Icons.Filled.AddCircle,contentDescription=null,tint=canonicalBlue);Spacer(Modifier.width(6.dp));Text("Добавить дату",color=canonicalBlue)}
             } else Spacer(Modifier.weight(1f))
             Button(onClick={
                 val pairs=if(daily) listOf(initial.toLocalDate() to initial.toLocalTime()) else selectedDates.sorted().map{it to (times[it]?:initial.toLocalTime())}
