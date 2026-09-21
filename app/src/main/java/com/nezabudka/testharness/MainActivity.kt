@@ -103,6 +103,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         var selected by remember { mutableStateOf<ReminderEntity?>(null) }
         var section by remember { mutableStateOf("reminders") }
         var scheduleFor by remember { mutableStateOf<ReminderEntity?>(null) }
+        var scheduleTitle by remember { mutableStateOf("Когда напомнить?") }
         var editTextFor by remember { mutableStateOf<ReminderEntity?>(null) }
         var editNoteFor by remember { mutableStateOf<ReminderEntity?>(null) }
         BackHandler(enabled = scheduleFor != null || editTextFor != null || editNoteFor != null || selected != null || section != "reminders") {
@@ -114,11 +115,12 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                 when {
                     editTextFor != null -> TextEditScreen("Что напомнить?",editTextFor!!.text,{editTextFor=null}){v->updateReminderText(editTextFor!!,v);selected=editTextFor!!.copy(text=v);editTextFor=null}
                     editNoteFor != null -> TextEditScreen("Заметка",prefs.getString("note_${editNoteFor!!.id}","").orEmpty(),{editNoteFor=null}){v->prefs.edit().putString("note_${editNoteFor!!.id}",v).apply();editNoteFor=null}
-                    scheduleFor != null -> ScheduleScreen(scheduleFor!!, onBack = { scheduleFor = null })
+                    scheduleFor != null -> ScheduleScreen(scheduleFor!!, title=scheduleTitle, onBack = { scheduleFor = null })
                     selected != null -> ReminderEditor(
                         reminder = selected!!,
                         onBack = { selected = null },
-                        onSchedule = { scheduleFor = selected },
+                        onWhen = { scheduleTitle="Когда напомнить?"; scheduleFor = selected },
+                        onRepeat = { scheduleTitle="Повторять напоминание?"; scheduleFor = selected },
                         onEditText = { editTextFor = selected },
                         onEditNote = { editNoteFor = selected },
                         onDelete = {
@@ -254,7 +256,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     }
 
     @Composable
-    private fun ReminderEditor(reminder:ReminderEntity,onBack:()->Unit,onSchedule:()->Unit,onEditText:()->Unit,onEditNote:()->Unit,onDelete:()->Unit) {
+    private fun ReminderEditor(reminder:ReminderEntity,onBack:()->Unit,onWhen:()->Unit,onRepeat:()->Unit,onEditText:()->Unit,onEditNote:()->Unit,onDelete:()->Unit) {
         var confirmDelete by remember { mutableStateOf(false) }
         if(confirmDelete) DeleteDialog(onCancel={confirmDelete=false},onDelete=onDelete)
         Column(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
@@ -265,8 +267,8 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                 Spacer(Modifier.width(12.dp));Text(reminder.text,style=MaterialTheme.typography.titleLarge,color=canonicalDarkBlue)
             }
             EditorLine(Icons.Outlined.ChatBubbleOutline,"Что напомнить?",reminder.text,onEditText)
-            EditorLine(Icons.Outlined.DateRange,"Когда напомнить?",format(reminder.dueAt),onSchedule)
-            EditorLine(Icons.Filled.Repeat,"Повторять напоминание?",if(reminder.recurrenceMinutes==1440L)"Каждый день" else "Не задано",onSchedule)
+            EditorLine(Icons.Outlined.DateRange,"Когда напомнить?",format(reminder.dueAt),onWhen)
+            EditorLine(Icons.Filled.Repeat,"Повторять напоминание?",if(reminder.recurrenceMinutes==1440L)"Каждый день" else "Не задано",onRepeat)
             var localVolume by remember { mutableFloatStateOf(prefs.getFloat("volume_${reminder.id}",prefs.getFloat("reminder_volume",1f))) }
             Row(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically){
                 Icon(Icons.Filled.VolumeUp,contentDescription=null,tint=canonicalDarkBlue,modifier=Modifier.size(30.dp));Spacer(Modifier.width(12.dp))
@@ -306,7 +308,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     }
 
     @Composable
-    private fun ScheduleScreen(reminder:ReminderEntity,onBack:()->Unit) {
+    private fun ScheduleScreen(reminder:ReminderEntity,title:String,onBack:()->Unit) {
         var daily by remember { mutableStateOf(reminder.recurrenceMinutes==1440L) }
         val initial = Instant.ofEpochMilli(reminder.dueAt).atZone(ZoneId.systemDefault())
         val restoredDates = remember(reminder.id, reminder.dueAt) {
@@ -349,7 +351,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         )
 
         Column(Modifier.fillMaxSize().padding(18.dp)) {
-            Row(verticalAlignment=Alignment.CenterVertically){BackButton(onBack);Spacer(Modifier.width(10.dp));Text("Повторять напоминание?",style=MaterialTheme.typography.titleLarge,color=canonicalDarkBlue)}
+            Row(verticalAlignment=Alignment.CenterVertically){BackButton(onBack);Spacer(Modifier.width(10.dp));Text(title,style=MaterialTheme.typography.titleLarge,color=canonicalDarkBlue)}
             Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){RadioButton(selected=daily,onClick={daily=true});Text("Каждый день")}
             Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){RadioButton(selected=!daily,onClick={daily=false});Text("Выбрать дату и время")}
             if(!daily) {
@@ -384,7 +386,6 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                         }
                     }
                 }
-                TextButton(onClick={val d=(selectedDates.maxOrNull()?:month.atDay(1)).plusDays(1);selectedDates=LinkedHashSet(selectedDates).apply{add(d)};times=times+(d to initial.toLocalTime().withSecond(0).withNano(0));month=java.time.YearMonth.from(d)}){Icon(Icons.Filled.AddCircle,contentDescription=null,tint=canonicalBlue);Spacer(Modifier.width(6.dp));Text("Добавить дату",color=canonicalBlue)}
             } else Spacer(Modifier.weight(1f))
             Button(onClick={
                 val pairs=if(daily) listOf(initial.toLocalDate() to initial.toLocalTime()) else selectedDates.sorted().map{it to (times[it]?:initial.toLocalTime())}
@@ -397,23 +398,18 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     private fun SettingsScreen(section:String,onSection:(String)->Unit) {
         var volume by remember { mutableFloatStateOf(prefs.getFloat("reminder_volume",1f)) }
         var editName by remember { mutableStateOf(false) };var nameDraft by remember { mutableStateOf(userName) }
-        var dnd by remember { mutableStateOf(prefs.getBoolean("dnd_enabled",false)) }
-        var dndTime by remember { mutableStateOf(false) }
-        var startH by remember { mutableIntStateOf(prefs.getInt("dnd_start_h",22)) };var startM by remember { mutableIntStateOf(prefs.getInt("dnd_start_m",0)) }
-        var endH by remember { mutableIntStateOf(prefs.getInt("dnd_end_h",7)) };var endM by remember { mutableIntStateOf(prefs.getInt("dnd_end_m",0)) }
         var language by remember { mutableStateOf(prefs.getString("language","Русский")?:"Русский") };var languageDialog by remember{mutableStateOf(false)}
         var melodyTitle by remember { mutableStateOf(prefs.getString("melody_title","Стандартная")?:"Стандартная") }
         var about by remember { mutableStateOf(false) }
+        var voiceInput by remember { mutableStateOf(prefs.getBoolean("voice_input_enabled",true)) }
+        var permissions by remember { mutableStateOf(false) }
         val melodyPicker=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){result->
             val uri=if(Build.VERSION.SDK_INT>=33) result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI,Uri::class.java) else @Suppress("DEPRECATION") result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
             if(uri!=null){melodyTitle=runCatching{RingtoneManager.getRingtone(this@MainActivity,uri)?.getTitle(this@MainActivity)}.getOrNull()?:"Выбранная";prefs.edit().putString("melody_uri",uri.toString()).putString("melody_title",melodyTitle).apply()}
         }
         if(editName) AlertDialog(onDismissRequest={editName=false},title={Text("Как к вам обращаться?")},text={OutlinedTextField(value=nameDraft,onValueChange={nameDraft=it},singleLine=true)},confirmButton={Button(onClick={userName=nameDraft.trim();prefs.edit().putString("user_name",userName).apply();editName=false},colors=ButtonDefaults.buttonColors(containerColor=canonicalBlue)){Text("Сохранить")}},dismissButton={TextButton(onClick={editName=false}){Text("Отмена")}})
         if(languageDialog) AlertDialog(onDismissRequest={languageDialog=false},title={Text("Язык")},text={Column{listOf("Русский","Українська","English","Español").forEach{v->TextButton(onClick={language=v;prefs.edit().putString("language",v).apply();languageDialog=false},modifier=Modifier.fillMaxWidth()){Text(v,modifier=Modifier.fillMaxWidth())}}}},confirmButton={})
-        if(dndTime) AlertDialog(onDismissRequest={dndTime=false},title={Text("Не беспокоить")},text={Column{
-            Text("С");Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=23;value=startH;setOnValueChangedListener{_,_,v->startH=v}}});AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=59;value=startM;setOnValueChangedListener{_,_,v->startM=v}}})}
-            Text("До");Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=23;value=endH;setOnValueChangedListener{_,_,v->endH=v}}});AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=59;value=endM;setOnValueChangedListener{_,_,v->endM=v}}})}
-        }},confirmButton={Button(onClick={prefs.edit().putInt("dnd_start_h",startH).putInt("dnd_start_m",startM).putInt("dnd_end_h",endH).putInt("dnd_end_m",endM).putBoolean("dnd_enabled",true).apply();dnd=true;dndTime=false},colors=ButtonDefaults.buttonColors(containerColor=canonicalBlue)){Text("Готово")}},dismissButton={TextButton(onClick={dndTime=false}){Text("Отмена")}})
+        if(permissions) AlertDialog(onDismissRequest={permissions=false},title={Text("Разрешения")},text={ val micAllowed=checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED; val notificationsAllowed=Build.VERSION.SDK_INT<33||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED; Text("Микрофон: ${if(micAllowed) "разрешён" else "не разрешён"}\nУведомления: ${if(notificationsAllowed) "разрешены" else "не разрешены"}") },confirmButton={TextButton(onClick={permissions=false}){Text("ОК")}})
         if(about) AlertDialog(onDismissRequest={about=false},title={Text("Незабудка")},text={Text("Версия 0.3.0\nПриложение голосовых и текстовых напоминаний.")},confirmButton={TextButton(onClick={about=false}){Text("ОК")}})
         Column(Modifier.fillMaxSize().padding(18.dp)) {
             Row(verticalAlignment=Alignment.CenterVertically){BackButton{onSection("reminders")};Text("Настройки",style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f),textAlign=androidx.compose.ui.text.style.TextAlign.Center,color=canonicalDarkBlue);Spacer(Modifier.width(42.dp))}
@@ -423,10 +419,10 @@ class MainActivity : ComponentActivity(), RecognitionListener {
             EditorLine(Icons.Filled.MusicNote,"Мелодия",melodyTitle){
                 melodyPicker.launch(Intent(RingtoneManager.ACTION_RINGTONE_PICKER).putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE,RingtoneManager.TYPE_ALARM).putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT,false))
             }
-            Row(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Filled.DarkMode,contentDescription=null,tint=canonicalDarkBlue,modifier=Modifier.size(30.dp));Spacer(Modifier.width(12.dp));Column(Modifier.weight(1f)){Text("Не беспокоить",color=canonicalDarkBlue);Text(if(dnd)String.format("%02d:%02d – %02d:%02d",startH,startM,endH,endM)else"Выключено",color=Color(0xFF59618F))};IconButton(onClick={dndTime=true}){Icon(Icons.Filled.ChevronRight,contentDescription="Изменить",tint=canonicalDarkBlue)};Switch(checked=dnd,onCheckedChange={dnd=it;prefs.edit().putBoolean("dnd_enabled",it).apply()},colors=SwitchDefaults.colors(checkedTrackColor=canonicalBlue))}
-            HorizontalDivider(color=Color(0xFFE7EAF0))
+            EditorLine(Icons.Filled.Mic,"Голосовой ввод",if(voiceInput)"Включен" else "Выключен"){voiceInput=!voiceInput;prefs.edit().putBoolean("voice_input_enabled",voiceInput).apply()}
             EditorLine(Icons.Filled.Language,"Язык",language,{languageDialog=true})
             EditorLine(Icons.Filled.Palette,"Тема оформления","Светлая",{})
+            EditorLine(Icons.Filled.Security,"Разрешения","",{permissions=true})
             EditorLine(Icons.Outlined.Info,"О приложении","",{about=true})
             Spacer(Modifier.weight(1f));BottomNav(section,onSection)
         }
