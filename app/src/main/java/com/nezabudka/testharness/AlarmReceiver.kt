@@ -11,6 +11,9 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.media.Ringtone
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -133,7 +136,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 ReminderNotifications.incrementFireCount(context, id)
                 ReminderNotifications.show(context, fired)
 
-                speak(context, fired.text) {
+                speak(context, fired) {
                     AlarmActivity.markQuestionReady(context, id)
                     Thread {
                         try {
@@ -175,7 +178,10 @@ class AlarmReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun speak(context: Context, text: String, done: () -> Unit) {
+    private fun speak(context: Context, reminder: ReminderEntity, done: () -> Unit) {
+        val text = reminder.text
+        val settings = context.getSharedPreferences("nezabudka_user", Context.MODE_PRIVATE)
+        val volume = settings.getFloat("volume_${reminder.id}", settings.getFloat("reminder_volume", 1.0f)).coerceIn(0f,1f)
         val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         var focusRequest: AudioFocusRequest? = null
         val focusGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -194,11 +200,13 @@ class AlarmReceiver : BroadcastReceiver() {
         val completed = AtomicBoolean(false)
         var tts: TextToSpeech? = null
         var tone: ToneGenerator? = null
+        var ringtone: Ringtone? = null
 
         fun finishOnce() {
             if (!completed.compareAndSet(false, true)) return
             runCatching { tone?.stopTone() }
             runCatching { tone?.release() }
+            runCatching { ringtone?.stop() }
             runCatching { tts?.shutdown() }
             if (focusGranted && focusRequest != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 runCatching { audio.abandonAudioFocusRequest(focusRequest!!) }
@@ -217,9 +225,19 @@ class AlarmReceiver : BroadcastReceiver() {
         val handler = Handler(Looper.getMainLooper())
 
         handler.post {
-            runCatching {
-                tone = ToneGenerator(AudioManager.STREAM_ALARM, 100)
-                tone?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 1100)
+            val melodyUri = settings.getString("melody_uri", null)
+            if (!melodyUri.isNullOrBlank()) {
+                runCatching {
+                    ringtone = RingtoneManager.getRingtone(context, Uri.parse(melodyUri))
+                    if (Build.VERSION.SDK_INT >= 28) ringtone?.volume = volume
+                    ringtone?.play()
+                    handler.postDelayed({ runCatching { ringtone?.stop() } }, 1300L)
+                }
+            } else {
+                runCatching {
+                    tone = ToneGenerator(AudioManager.STREAM_ALARM, (volume * 100).toInt())
+                    tone?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 1100)
+                }
             }
         }
 
@@ -249,7 +267,7 @@ class AlarmReceiver : BroadcastReceiver() {
                                     tts?.setSpeechRate(0.82f)
                                     tts?.setPitch(1.18f)
                                     val questionParams = Bundle().apply {
-                                        putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
+                                        putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume)
                                     }
                                     tts?.speak(
                                         "Вы меня услышали?",

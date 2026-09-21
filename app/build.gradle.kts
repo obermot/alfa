@@ -13,8 +13,8 @@ android {
         applicationId = "com.nezabudka.alpha.clean013"
         minSdk = 26
         targetSdk = 36
-        versionCode = 119
-        versionName = "0.2.9-phone-test-batch"
+        versionCode = 120
+        versionName = "0.3.0-canonical-visual-pass"
     }
 
     val signingStorePath = System.getenv("NEZABUDKA_SIGNING_STORE_PATH")
@@ -60,6 +60,7 @@ dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.09.01"))
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
     implementation("androidx.room:room-runtime:2.8.1")
     implementation("androidx.room:room-ktx:2.8.1")

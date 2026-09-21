@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -16,12 +17,20 @@ import android.speech.tts.UtteranceProgressListener
 import android.widget.NumberPicker
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.activity.compose.BackHandler
@@ -29,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import org.json.JSONObject
@@ -99,8 +109,8 @@ class MainActivity : ComponentActivity(), RecognitionListener {
             when { scheduleFor != null -> scheduleFor = null; editTextFor != null -> editTextFor=null; editNoteFor != null -> editNoteFor=null; selected != null -> selected = null; else -> section = "reminders" }
         }
 
-        MaterialTheme {
-            Surface(Modifier.fillMaxSize()) {
+        MaterialTheme(colorScheme = lightColorScheme(primary=Color(0xFF087BFF),secondary=Color(0xFF087BFF),surface=Color.White,background=Color.White)) {
+            Surface(Modifier.fillMaxSize(), color=Color.White) {
                 when {
                     editTextFor != null -> TextEditScreen("Что напомнить?",editTextFor!!.text,{editTextFor=null}){v->updateReminderText(editTextFor!!,v);selected=editTextFor!!.copy(text=v);editTextFor=null}
                     editNoteFor != null -> TextEditScreen("Заметка",prefs.getString("note_${editNoteFor!!.id}","").orEmpty(),{editNoteFor=null}){v->prefs.edit().putString("note_${editNoteFor!!.id}",v).apply();editNoteFor=null}
@@ -139,66 +149,107 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         }
     }
 
+    private val canonicalBlue = Color(0xFF087BFF)
+    private val canonicalDarkBlue = Color(0xFF001C8F)
+    private val canonicalPaleBlue = Color(0xFFEAF4FF)
+    private val canonicalRed = Color(0xFFFF1F24)
+
+    @Composable
+    private fun BackButton(onClick:()->Unit) {
+        IconButton(onClick=onClick,modifier=Modifier.size(42.dp).background(canonicalPaleBlue,CircleShape)) {
+            Icon(Icons.Filled.ArrowBack,contentDescription="Назад",tint=canonicalBlue,modifier=Modifier.size(28.dp))
+        }
+    }
+
     @Composable
     private fun HomeScreen(
         text: String, onText: (String) -> Unit, onSend: () -> Unit, onMic: () -> Unit,
         onReminder: (ReminderEntity) -> Unit, onAll: () -> Unit,
         section: String, onSection: (String) -> Unit
     ) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp)) {
-            Text("✿  Незабудка", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF006BFF))
-            Text("Ваши напоминания", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(18.dp))
-            Text(if (userName.isBlank()) "Что вам напомнить?" else "$userName,\nчто вам напомнить?", style = MaterialTheme.typography.headlineSmall)
+        Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 10.dp)) {
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                Box(Modifier.size(54.dp).background(canonicalPaleBlue,RoundedCornerShape(13.dp)),contentAlignment=Alignment.Center) {
+                    Icon(Icons.Filled.LocalFlorist,contentDescription="Логотип Незабудки",tint=canonicalBlue,modifier=Modifier.size(42.dp))
+                }
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text("Незабудка",style=MaterialTheme.typography.headlineSmall,color=canonicalBlue)
+                    Text("Ваши напоминания",style=MaterialTheme.typography.bodySmall,color=canonicalDarkBlue)
+                }
+            }
             Spacer(Modifier.height(14.dp))
-            Button(onClick = onMic, modifier = Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally).size(82.dp), shape = androidx.compose.foundation.shape.CircleShape) {
-                Text(if (listening) "■" else "🎙", style = MaterialTheme.typography.headlineMedium)
+            Text(if (userName.isBlank()) "Что вам напомнить?" else "$userName,\nчто вам напомнить?", style = MaterialTheme.typography.headlineSmall,color=canonicalDarkBlue)
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick=onMic,
+                modifier=Modifier.align(Alignment.CenterHorizontally).size(88.dp),
+                shape=CircleShape,
+                contentPadding=PaddingValues(0.dp),
+                colors=ButtonDefaults.buttonColors(containerColor=canonicalBlue)
+            ) {
+                Icon(if(listening) Icons.Filled.Stop else Icons.Filled.Mic,contentDescription="Микрофон",tint=Color.White,modifier=Modifier.size(48.dp))
             }
-            Text("Нажмите и скажите,\nили", modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall, modifier=Modifier.fillMaxWidth(), textAlign=androidx.compose.ui.text.style.TextAlign.Center)
+            Spacer(Modifier.height(8.dp))
+            Text("Нажмите и скажите,\nили", modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center,color=canonicalDarkBlue)
+            if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall, modifier=Modifier.fillMaxWidth(), textAlign=androidx.compose.ui.text.style.TextAlign.Center,color=canonicalDarkBlue)
             OutlinedTextField(
-                value=text, onValueChange=onText, placeholder={Text("Написать напоминание…")},
-                trailingIcon={ if(text.isNotBlank()) TextButton(onClick=onSend){Text("➜")} },
-                singleLine=true, modifier=Modifier.fillMaxWidth()
+                value=text,onValueChange=onText,placeholder={Text("Написать напоминание…")},
+                leadingIcon={Icon(Icons.Outlined.Image,contentDescription=null,tint=canonicalBlue)},
+                trailingIcon={if(text.isNotBlank()) IconButton(onClick=onSend){Icon(Icons.Filled.Send,contentDescription="Отправить",tint=canonicalBlue)}},
+                singleLine=true,modifier=Modifier.fillMaxWidth(),
+                shape=RoundedCornerShape(8.dp),
+                colors=OutlinedTextFieldDefaults.colors(focusedBorderColor=canonicalBlue,unfocusedBorderColor=Color(0xFF8FC8FF))
             )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween, verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
-                Text("Ближайшие напоминания", style=MaterialTheme.typography.titleMedium)
-                TextButton(onClick=onAll){Text("Все ›")}
+            Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween, verticalAlignment=Alignment.CenterVertically) {
+                Text("Ближайшие напоминания",style=MaterialTheme.typography.titleMedium,color=canonicalDarkBlue)
+                TextButton(onClick=onAll){Text("Все ›",color=canonicalBlue)}
             }
-            LazyColumn(Modifier.weight(1f)) {
-                items(allReminders.take(6), key={it.id}) { r -> ReminderRow(r, onReminder) }
-            }
+            LazyColumn(Modifier.weight(1f)) { items(allReminders.take(6),key={it.id}){r->ReminderRow(r,onReminder)} }
             BottomNav(section,onSection)
         }
     }
 
     @Composable
-    private fun ReminderRow(r: ReminderEntity, onReminder:(ReminderEntity)->Unit) {
-        Row(
-            Modifier.fillMaxWidth().pointerInput(r.id){ detectTapGestures(onTap={onReminder(r)}) }.padding(vertical=8.dp),
-            verticalAlignment=androidx.compose.ui.Alignment.CenterVertically
-        ) {
-            Text(semanticIcon(r.text), style=MaterialTheme.typography.headlineSmall)
+    private fun ReminderRow(r: ReminderEntity,onReminder:(ReminderEntity)->Unit) {
+        Row(Modifier.fillMaxWidth().pointerInput(r.id){detectTapGestures(onTap={onReminder(r)})}.padding(vertical=7.dp),verticalAlignment=Alignment.CenterVertically) {
+            Icon(reminderIcon(r.text),contentDescription=null,tint=reminderIconColor(r.text),modifier=Modifier.size(34.dp))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(r.text, style=MaterialTheme.typography.titleMedium)
-                Text(format(r.dueAt), style=MaterialTheme.typography.bodySmall)
+                Text(r.text,style=MaterialTheme.typography.titleMedium,color=canonicalDarkBlue)
+                Text(format(r.dueAt),style=MaterialTheme.typography.bodySmall,color=Color(0xFF555B86))
             }
-            Switch(checked=r.active,onCheckedChange={setReminderEnabled(r,it)})
-            TextButton(onClick={deleteReminder(r)}, modifier=Modifier.size(58.dp)){Text("▥", color=Color.Red, style=MaterialTheme.typography.headlineMedium)}
+            Switch(
+                checked=r.active,onCheckedChange={setReminderEnabled(r,it)},
+                colors=SwitchDefaults.colors(checkedThumbColor=Color.White,checkedTrackColor=canonicalBlue,uncheckedThumbColor=Color.White,uncheckedTrackColor=Color(0xFFD7DEEA))
+            )
+            IconButton(onClick={deleteReminder(r)},modifier=Modifier.size(48.dp)) {
+                Icon(Icons.Outlined.Delete,contentDescription="Удалить",tint=canonicalRed,modifier=Modifier.size(30.dp))
+            }
         }
-        HorizontalDivider()
+        HorizontalDivider(color=Color(0xFFE7EAF0))
     }
 
-    private fun semanticIcon(text:String):String {
+    private fun reminderIcon(text:String):ImageVector {
         val s=text.lowercase()
         return when {
-            "таблет" in s || "лекар" in s -> "💊"
-            "позвон" in s || "врач" in s -> "☎"
-            "трен" in s -> "🏋"
-            "куп" in s || "продукт" in s -> "🛒"
-            "читать" in s || "книг" in s -> "📖"
-            else -> "🔔"
+            "таблет" in s || "лекар" in s -> Icons.Filled.Medication
+            "позвон" in s || "врач" in s -> Icons.Filled.Phone
+            "трен" in s -> Icons.Filled.FitnessCenter
+            "куп" in s || "продукт" in s -> Icons.Filled.ShoppingCart
+            "читать" in s || "книг" in s -> Icons.Filled.MenuBook
+            "давлен" in s -> Icons.Filled.Favorite
+            else -> Icons.Filled.Notifications
+        }
+    }
+
+    private fun reminderIconColor(text:String):Color {
+        val s=text.lowercase()
+        return when {
+            "таблет" in s || "лекар" in s -> canonicalBlue
+            "позвон" in s || "врач" in s -> Color(0xFF08A94F)
+            "давлен" in s -> canonicalRed
+            else -> canonicalBlue
         }
     }
 
@@ -206,44 +257,71 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     private fun ReminderEditor(reminder:ReminderEntity,onBack:()->Unit,onSchedule:()->Unit,onEditText:()->Unit,onEditNote:()->Unit,onDelete:()->Unit) {
         var confirmDelete by remember { mutableStateOf(false) }
         if(confirmDelete) DeleteDialog(onCancel={confirmDelete=false},onDelete=onDelete)
-        Column(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick=onBack){Text("←")}
-            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){Text(semanticIcon(reminder.text),style=MaterialTheme.typography.headlineMedium);Spacer(Modifier.width(12.dp));Text(reminder.text,style=MaterialTheme.typography.titleLarge)}
-            EditorLine("●","Что напомнить?",reminder.text,onEditText)
-            EditorLine("▣","Когда напомнить?",format(reminder.dueAt),onSchedule)
-            EditorLine("↻","Повторять напоминание?",if(reminder.recurrenceMinutes==1440L)"Каждый день" else "Не задано",onSchedule)
-            var localVolume by remember { mutableFloatStateOf(prefs.getFloat("volume_${reminder.id}",prefs.getFloat("reminder_volume",1f))) }; Text("●   Громкость"); Slider(value=localVolume,onValueChange={localVolume=it;prefs.edit().putFloat("volume_${reminder.id}",it).apply()})
-            EditorLine("●","Заметка",prefs.getString("note_${reminder.id}","").orEmpty().ifBlank{"(необязательно)"},onEditNote)
+        Column(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
+            BackButton(onBack)
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment=Alignment.CenterVertically){
+                Icon(reminderIcon(reminder.text),contentDescription=null,tint=reminderIconColor(reminder.text),modifier=Modifier.size(42.dp))
+                Spacer(Modifier.width(12.dp));Text(reminder.text,style=MaterialTheme.typography.titleLarge,color=canonicalDarkBlue)
+            }
+            EditorLine(Icons.Outlined.ChatBubbleOutline,"Что напомнить?",reminder.text,onEditText)
+            EditorLine(Icons.Outlined.DateRange,"Когда напомнить?",format(reminder.dueAt),onSchedule)
+            EditorLine(Icons.Filled.Repeat,"Повторять напоминание?",if(reminder.recurrenceMinutes==1440L)"Каждый день" else "Не задано",onSchedule)
+            var localVolume by remember { mutableFloatStateOf(prefs.getFloat("volume_${reminder.id}",prefs.getFloat("reminder_volume",1f))) }
+            Row(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically){
+                Icon(Icons.Filled.VolumeUp,contentDescription=null,tint=canonicalDarkBlue,modifier=Modifier.size(30.dp));Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)){Text("Громкость",color=canonicalDarkBlue);Slider(value=localVolume,onValueChange={localVolume=it;prefs.edit().putFloat("volume_${reminder.id}",it).apply()},colors=SliderDefaults.colors(thumbColor=canonicalBlue,activeTrackColor=canonicalBlue))}
+                Icon(Icons.Filled.ChevronRight,contentDescription=null,tint=canonicalDarkBlue)
+            }
+            HorizontalDivider(color=Color(0xFFE7EAF0))
+            EditorLine(Icons.Outlined.NoteAlt,"Заметка",prefs.getString("note_${reminder.id}","").orEmpty().ifBlank{"(необязательно)"},onEditNote)
             Spacer(Modifier.weight(1f))
-            Button(onClick=onBack,modifier=Modifier.fillMaxWidth().height(54.dp)){Text("Сохранить")}
-            Button(onClick={confirmDelete=true},modifier=Modifier.fillMaxWidth().height(54.dp),colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.errorContainer,contentColor=MaterialTheme.colorScheme.error)){Text("🗑  Удалить напоминание")}
+            Button(onClick=onBack,modifier=Modifier.fillMaxWidth().height(54.dp),colors=ButtonDefaults.buttonColors(containerColor=canonicalBlue),shape=RoundedCornerShape(8.dp)){Text("Сохранить")}
+            Button(onClick={confirmDelete=true},modifier=Modifier.fillMaxWidth().height(54.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFFFFECEC),contentColor=canonicalRed),shape=RoundedCornerShape(8.dp)){
+                Icon(Icons.Outlined.Delete,contentDescription=null,modifier=Modifier.size(28.dp));Spacer(Modifier.width(8.dp));Text("Удалить напоминание")
+            }
         }
     }
 
     @Composable
     private fun TextEditScreen(title:String,initial:String,onBack:()->Unit,onSave:(String)->Unit) {
         var value by remember { mutableStateOf(initial) }
-        Column(Modifier.fillMaxSize().padding(18.dp)) {
-            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick=onBack){Text("←",style=MaterialTheme.typography.headlineSmall)};Text(title,style=MaterialTheme.typography.titleLarge)}
-            OutlinedTextField(value=value,onValueChange={value=it},modifier=Modifier.fillMaxWidth(),minLines=3)
-            Spacer(Modifier.weight(1f))
-            Button(onClick={onSave(value.trim())},enabled=value.isNotBlank(),modifier=Modifier.fillMaxWidth().height(54.dp)){Text("Сохранить")}
+        Column(Modifier.fillMaxSize().padding(18.dp).imePadding()) {
+            Row(verticalAlignment=Alignment.CenterVertically){BackButton(onBack);Spacer(Modifier.width(12.dp));Text(title,style=MaterialTheme.typography.titleLarge,color=canonicalDarkBlue)}
+            Spacer(Modifier.height(14.dp))
+            OutlinedTextField(value=value,onValueChange={value=it},modifier=Modifier.fillMaxWidth(),minLines=3,shape=RoundedCornerShape(8.dp),colors=OutlinedTextFieldDefaults.colors(focusedBorderColor=canonicalBlue))
+            Spacer(Modifier.height(10.dp))
+            Button(onClick={onSave(value.trim())},enabled=value.isNotBlank(),modifier=Modifier.fillMaxWidth().height(52.dp),colors=ButtonDefaults.buttonColors(containerColor=canonicalBlue)){Text("Сохранить")}
         }
     }
 
-    @Composable private fun EditorLine(icon:String,title:String,value:String,onClick:()->Unit) {
-        Row(Modifier.fillMaxWidth().pointerInput(title){detectTapGestures(onTap={onClick()})}.padding(vertical=9.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
-            Text(icon,style=MaterialTheme.typography.titleLarge);Spacer(Modifier.width(12.dp));Column(Modifier.weight(1f)){Text(title);Text(value,color=MaterialTheme.colorScheme.onSurfaceVariant)};Text("›")
-        };HorizontalDivider()
+    @Composable
+    private fun EditorLine(icon:ImageVector,title:String,value:String,onClick:()->Unit) {
+        Row(Modifier.fillMaxWidth().pointerInput(title){detectTapGestures(onTap={onClick()})}.padding(vertical=9.dp),verticalAlignment=Alignment.CenterVertically){
+            Icon(icon,contentDescription=null,tint=canonicalDarkBlue,modifier=Modifier.size(30.dp));Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)){Text(title,color=canonicalDarkBlue);Text(value,color=Color(0xFF59618F))}
+            Icon(Icons.Filled.ChevronRight,contentDescription=null,tint=canonicalDarkBlue)
+        }
+        HorizontalDivider(color=Color(0xFFE7EAF0))
     }
 
     @Composable
     private fun ScheduleScreen(reminder:ReminderEntity,onBack:()->Unit) {
         var daily by remember { mutableStateOf(reminder.recurrenceMinutes==1440L) }
         val initial = Instant.ofEpochMilli(reminder.dueAt).atZone(ZoneId.systemDefault())
+        val restoredDates = remember(reminder.id, reminder.dueAt) {
+            linkedMapOf(initial.toLocalDate() to initial.toLocalTime().withSecond(0).withNano(0)).apply {
+                prefs.getString("extra_dates_${reminder.id}", "").orEmpty().split(";").filter { it.contains("|") }.forEach { item ->
+                    runCatching {
+                        val p=item.split("|"); val d=LocalDate.parse(p[0]); val hm=p[1].split(":")
+                        put(d,LocalTime.of(hm[0].toInt(),hm[1].toInt()))
+                    }
+                }
+            }
+        }
         var month by remember { mutableStateOf(java.time.YearMonth.from(initial)) }
-        var selectedDates by remember { mutableStateOf(linkedSetOf(initial.toLocalDate())) }
-        var times by remember { mutableStateOf(mapOf(initial.toLocalDate() to initial.toLocalTime().withSecond(0).withNano(0))) }
+        var selectedDates by remember { mutableStateOf(LinkedHashSet(restoredDates.keys)) }
+        var times by remember { mutableStateOf(restoredDates.toMap()) }
         var editingDate by remember { mutableStateOf<LocalDate?>(null) }
         var editAll by remember { mutableStateOf(false) }
         var hour by remember { mutableIntStateOf(initial.hour) }
@@ -256,12 +334,12 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         }
         if(editingDate!=null || editAll) AlertDialog(
             onDismissRequest={editingDate=null;editAll=false},
-            title={Text(if(editAll)"Изменить время для всех" else "Время")},
-            text={Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
+            title={Text(if(editAll)"Время для всех выбранных дат" else "Время напоминания",color=canonicalDarkBlue)},
+            text={Column(horizontalAlignment=Alignment.CenterHorizontally){Text(if(editAll)"Изменяется время у ${selectedDates.size} выбранных дат" else editingDate?.format(DateTimeFormatter.ofPattern("d MMMM",Locale("ru"))).orEmpty(),color=Color(0xFF59618F));Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
                 AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=23;value=hour;setOnValueChangedListener{_,_,v->hour=v}}})
                 Text(":",style=MaterialTheme.typography.headlineMedium)
                 AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=59;value=minute;setFormatter{String.format("%02d",it)};setOnValueChangedListener{_,_,v->minute=v}}})
-            }},
+            }}},
             confirmButton={Button(onClick={
                 val t=LocalTime.of(hour,minute)
                 times=if(editAll) selectedDates.associateWith{t} else times+(editingDate!! to t)
@@ -271,14 +349,14 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         )
 
         Column(Modifier.fillMaxSize().padding(18.dp)) {
-            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick=onBack){Text("←",style=MaterialTheme.typography.headlineSmall)};Text("Повторять напоминание?",style=MaterialTheme.typography.titleLarge)}
+            Row(verticalAlignment=Alignment.CenterVertically){BackButton(onBack);Spacer(Modifier.width(10.dp));Text("Повторять напоминание?",style=MaterialTheme.typography.titleLarge,color=canonicalDarkBlue)}
             Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){RadioButton(selected=daily,onClick={daily=true});Text("Каждый день")}
             Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){RadioButton(selected=!daily,onClick={daily=false});Text("Выбрать дату и время")}
             if(!daily) {
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
-                    TextButton(onClick={month=month.minusMonths(1)}){Text("‹")}
+                    IconButton(onClick={month=month.minusMonths(1)},modifier=Modifier.size(48.dp)){Icon(Icons.Filled.ChevronLeft,contentDescription="Предыдущий месяц",tint=canonicalDarkBlue,modifier=Modifier.size(36.dp))}
                     Text(month.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru"))).replaceFirstChar{it.titlecase(Locale("ru"))},style=MaterialTheme.typography.titleMedium)
-                    TextButton(onClick={month=month.plusMonths(1)}){Text("›")}
+                    IconButton(onClick={month=month.plusMonths(1)},modifier=Modifier.size(48.dp)){Icon(Icons.Filled.ChevronRight,contentDescription="Следующий месяц",tint=canonicalDarkBlue,modifier=Modifier.size(36.dp))}
                 }
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceAround){listOf("Пн","Вт","Ср","Чт","Пт","Сб","Вс").forEach{Text(it,style=MaterialTheme.typography.labelSmall)}}
                 val first=month.atDay(1);val offset=first.dayOfWeek.value-1;val days=month.lengthOfMonth()
@@ -291,22 +369,22 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                                 TextButton(onClick={
                                     selectedDates=LinkedHashSet(selectedDates).apply{if(chosen) remove(date) else add(date)}
                                     if(!chosen && times[date]==null) times=times+(date to initial.toLocalTime().withSecond(0).withNano(0))
-                                },modifier=Modifier.size(42.dp),colors=ButtonDefaults.textButtonColors(containerColor=if(chosen) Color(0xFF006BFF) else Color.Transparent,contentColor=if(chosen) Color.White else MaterialTheme.colorScheme.onSurface)){Text(day.toString())}
-                            } else Spacer(Modifier.size(42.dp))
+                                },modifier=Modifier.size(34.dp),contentPadding=PaddingValues(0.dp),colors=ButtonDefaults.textButtonColors(containerColor=if(chosen) Color(0xFF006BFF) else Color.Transparent,contentColor=if(chosen) Color.White else MaterialTheme.colorScheme.onSurface)){Text(day.toString())}
+                            } else Spacer(Modifier.size(34.dp))
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){Text("Выбранные даты и время",style=MaterialTheme.typography.titleMedium);TextButton(onClick={if(selectedDates.isNotEmpty())openTime(null,true)}){Text("Изменить все")}}
-                LazyColumn(Modifier.weight(1f,false)){
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){Text("Выбранные даты и время",style=MaterialTheme.typography.titleMedium,color=canonicalDarkBlue);TextButton(onClick={if(selectedDates.isNotEmpty())openTime(null,true)}){Text("Изменить все")}}
+                LazyColumn(Modifier.heightIn(max=160.dp)){
                     items(selectedDates.sorted(),key={it.toEpochDay()}){date->
                         Row(Modifier.fillMaxWidth().padding(vertical=4.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
-                            Text(date.format(DateTimeFormatter.ofPattern("d MMMM",Locale("ru"))),modifier=Modifier.weight(1f))
-                            OutlinedButton(onClick={openTime(date)}){Text((times[date]?:initial.toLocalTime()).format(DateTimeFormatter.ofPattern("HH:mm")))}
-                            TextButton(onClick={selectedDates=LinkedHashSet(selectedDates).apply{remove(date)};times=times-date}){Text("⋮",style=MaterialTheme.typography.headlineSmall)}
+                            Icon(Icons.Outlined.DateRange,contentDescription=null,tint=canonicalDarkBlue,modifier=Modifier.size(24.dp));Spacer(Modifier.width(8.dp));Text(date.format(DateTimeFormatter.ofPattern("d MMMM yyyy",Locale("ru"))),modifier=Modifier.weight(1f),color=canonicalDarkBlue)
+                            Button(onClick={openTime(date)},colors=ButtonDefaults.buttonColors(containerColor=canonicalPaleBlue,contentColor=canonicalBlue),contentPadding=PaddingValues(horizontal=12.dp,vertical=6.dp)){Text((times[date]?:initial.toLocalTime()).format(DateTimeFormatter.ofPattern("HH:mm")),style=MaterialTheme.typography.titleMedium)}
+                            IconButton(onClick={selectedDates=LinkedHashSet(selectedDates).apply{remove(date)};times=times-date},modifier=Modifier.size(36.dp)){Icon(Icons.Filled.MoreVert,contentDescription="Меню даты",tint=canonicalDarkBlue)}
                         }
                     }
                 }
-                TextButton(onClick={val d=(selectedDates.maxOrNull()?:month.atDay(1)).plusDays(1);selectedDates=LinkedHashSet(selectedDates).apply{add(d)};times=times+(d to initial.toLocalTime().withSecond(0).withNano(0));month=java.time.YearMonth.from(d)}){Text("+  Добавить дату")}
+                TextButton(onClick={val d=(selectedDates.maxOrNull()?:month.atDay(1)).plusDays(1);selectedDates=LinkedHashSet(selectedDates).apply{add(d)};times=times+(d to initial.toLocalTime().withSecond(0).withNano(0));month=java.time.YearMonth.from(d)}){Icon(Icons.Filled.AddCircle,contentDescription=null,tint=canonicalBlue);Spacer(Modifier.width(6.dp));Text("Добавить дату",color=canonicalBlue)}
             } else Spacer(Modifier.weight(1f))
             Button(onClick={
                 val pairs=if(daily) listOf(initial.toLocalDate() to initial.toLocalTime()) else selectedDates.sorted().map{it to (times[it]?:initial.toLocalTime())}
@@ -324,24 +402,32 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         var startH by remember { mutableIntStateOf(prefs.getInt("dnd_start_h",22)) };var startM by remember { mutableIntStateOf(prefs.getInt("dnd_start_m",0)) }
         var endH by remember { mutableIntStateOf(prefs.getInt("dnd_end_h",7)) };var endM by remember { mutableIntStateOf(prefs.getInt("dnd_end_m",0)) }
         var language by remember { mutableStateOf(prefs.getString("language","Русский")?:"Русский") };var languageDialog by remember{mutableStateOf(false)}
+        var melodyTitle by remember { mutableStateOf(prefs.getString("melody_title","Стандартная")?:"Стандартная") }
         var about by remember { mutableStateOf(false) }
-        if(editName) AlertDialog(onDismissRequest={editName=false},title={Text("Как к вам обращаться?")},text={OutlinedTextField(value=nameDraft,onValueChange={nameDraft=it},singleLine=true)},confirmButton={Button(onClick={userName=nameDraft.trim();prefs.edit().putString("user_name",userName).apply();editName=false}){Text("Сохранить")}},dismissButton={TextButton(onClick={editName=false}){Text("Отмена")}})
+        val melodyPicker=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){result->
+            val uri=if(Build.VERSION.SDK_INT>=33) result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI,Uri::class.java) else @Suppress("DEPRECATION") result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            if(uri!=null){melodyTitle=runCatching{RingtoneManager.getRingtone(this@MainActivity,uri)?.getTitle(this@MainActivity)}.getOrNull()?:"Выбранная";prefs.edit().putString("melody_uri",uri.toString()).putString("melody_title",melodyTitle).apply()}
+        }
+        if(editName) AlertDialog(onDismissRequest={editName=false},title={Text("Как к вам обращаться?")},text={OutlinedTextField(value=nameDraft,onValueChange={nameDraft=it},singleLine=true)},confirmButton={Button(onClick={userName=nameDraft.trim();prefs.edit().putString("user_name",userName).apply();editName=false},colors=ButtonDefaults.buttonColors(containerColor=canonicalBlue)){Text("Сохранить")}},dismissButton={TextButton(onClick={editName=false}){Text("Отмена")}})
         if(languageDialog) AlertDialog(onDismissRequest={languageDialog=false},title={Text("Язык")},text={Column{listOf("Русский","Українська","English","Español").forEach{v->TextButton(onClick={language=v;prefs.edit().putString("language",v).apply();languageDialog=false},modifier=Modifier.fillMaxWidth()){Text(v,modifier=Modifier.fillMaxWidth())}}}},confirmButton={})
         if(dndTime) AlertDialog(onDismissRequest={dndTime=false},title={Text("Не беспокоить")},text={Column{
             Text("С");Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=23;value=startH;setOnValueChangedListener{_,_,v->startH=v}}});AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=59;value=startM;setOnValueChangedListener{_,_,v->startM=v}}})}
             Text("До");Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=23;value=endH;setOnValueChangedListener{_,_,v->endH=v}}});AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=59;value=endM;setOnValueChangedListener{_,_,v->endM=v}}})}
-        }},confirmButton={Button(onClick={prefs.edit().putInt("dnd_start_h",startH).putInt("dnd_start_m",startM).putInt("dnd_end_h",endH).putInt("dnd_end_m",endM).apply();dnd=true;prefs.edit().putBoolean("dnd_enabled",true).apply();dndTime=false}){Text("Готово")}},dismissButton={TextButton(onClick={dndTime=false}){Text("Отмена")}})
-        if(about) AlertDialog(onDismissRequest={about=false},title={Text("Незабудка")},text={Text("Версия 0.2.9\nПриложение голосовых и текстовых напоминаний.")},confirmButton={TextButton(onClick={about=false}){Text("ОК")}})
+        }},confirmButton={Button(onClick={prefs.edit().putInt("dnd_start_h",startH).putInt("dnd_start_m",startM).putInt("dnd_end_h",endH).putInt("dnd_end_m",endM).putBoolean("dnd_enabled",true).apply();dnd=true;dndTime=false},colors=ButtonDefaults.buttonColors(containerColor=canonicalBlue)){Text("Готово")}},dismissButton={TextButton(onClick={dndTime=false}){Text("Отмена")}})
+        if(about) AlertDialog(onDismissRequest={about=false},title={Text("Незабудка")},text={Text("Версия 0.3.0\nПриложение голосовых и текстовых напоминаний.")},confirmButton={TextButton(onClick={about=false}){Text("ОК")}})
         Column(Modifier.fillMaxSize().padding(18.dp)) {
-            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick={onSection("reminders")}){Text("←",color=Color(0xFF006BFF),style=MaterialTheme.typography.headlineSmall)};Text("Настройки",style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f),textAlign=androidx.compose.ui.text.style.TextAlign.Center);Spacer(Modifier.width(48.dp))}
-            EditorLine("●","Как к вам обращаться?",userName.ifBlank{"Не задано"},{editName=true})
-            Text("●   Громкость напоминаний");Slider(value=volume,onValueChange={volume=it;prefs.edit().putFloat("reminder_volume",it).apply()})
-            EditorLine("♪","Звук напоминания","Стандартный",{})
-            Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){Text("☾",style=MaterialTheme.typography.titleLarge);Spacer(Modifier.width(12.dp));Column(Modifier.weight(1f)){Text("Не беспокоить");Text(if(dnd)String.format("%02d:%02d – %02d:%02d",startH,startM,endH,endM) else "Выключено",color=MaterialTheme.colorScheme.onSurfaceVariant)};TextButton(onClick={dndTime=true}){Text("Изменить")};Switch(checked=dnd,onCheckedChange={dnd=it;prefs.edit().putBoolean("dnd_enabled",it).apply()})}
-            HorizontalDivider()
-            EditorLine("◎","Язык",language,{languageDialog=true})
-            EditorLine("◉","Тема оформления","Светлая",{})
-            EditorLine("ⓘ","О приложении","",{about=true})
+            Row(verticalAlignment=Alignment.CenterVertically){BackButton{onSection("reminders")};Text("Настройки",style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f),textAlign=androidx.compose.ui.text.style.TextAlign.Center,color=canonicalDarkBlue);Spacer(Modifier.width(42.dp))}
+            EditorLine(Icons.Outlined.Person,"Как к вам обращаться?",userName.ifBlank{"Не задано"},{editName=true})
+            Row(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Outlined.Notifications,contentDescription=null,tint=canonicalDarkBlue,modifier=Modifier.size(30.dp));Spacer(Modifier.width(12.dp));Column(Modifier.weight(1f)){Text("Громкость напоминаний",color=canonicalDarkBlue);Slider(value=volume,onValueChange={volume=it;prefs.edit().putFloat("reminder_volume",it).apply()},colors=SliderDefaults.colors(thumbColor=canonicalBlue,activeTrackColor=canonicalBlue))}}
+            HorizontalDivider(color=Color(0xFFE7EAF0))
+            EditorLine(Icons.Filled.MusicNote,"Мелодия",melodyTitle){
+                melodyPicker.launch(Intent(RingtoneManager.ACTION_RINGTONE_PICKER).putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE,RingtoneManager.TYPE_ALARM).putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT,false))
+            }
+            Row(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Filled.DarkMode,contentDescription=null,tint=canonicalDarkBlue,modifier=Modifier.size(30.dp));Spacer(Modifier.width(12.dp));Column(Modifier.weight(1f)){Text("Не беспокоить",color=canonicalDarkBlue);Text(if(dnd)String.format("%02d:%02d – %02d:%02d",startH,startM,endH,endM)else"Выключено",color=Color(0xFF59618F))};IconButton(onClick={dndTime=true}){Icon(Icons.Filled.ChevronRight,contentDescription="Изменить",tint=canonicalDarkBlue)};Switch(checked=dnd,onCheckedChange={dnd=it;prefs.edit().putBoolean("dnd_enabled",it).apply()},colors=SwitchDefaults.colors(checkedTrackColor=canonicalBlue))}
+            HorizontalDivider(color=Color(0xFFE7EAF0))
+            EditorLine(Icons.Filled.Language,"Язык",language,{languageDialog=true})
+            EditorLine(Icons.Filled.Palette,"Тема оформления","Светлая",{})
+            EditorLine(Icons.Outlined.Info,"О приложении","",{about=true})
             Spacer(Modifier.weight(1f));BottomNav(section,onSection)
         }
     }
@@ -352,7 +438,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         var filter by remember { mutableStateOf("Все") }
         LaunchedEffect(reminders){ Thread{ val x=AlphaDatabase.get(this@MainActivity).reminders().all();runOnUiThread{all=x} }.start() }
         Column(Modifier.fillMaxSize().padding(18.dp)) {
-            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick=onBack){Text("←")};Text("Все напоминания",style=MaterialTheme.typography.titleLarge)}
+            Row(verticalAlignment=Alignment.CenterVertically){BackButton(onBack);Spacer(Modifier.width(10.dp));Text("Все напоминания",style=MaterialTheme.typography.titleLarge,color=canonicalDarkBlue)}
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(4.dp)){listOf("Все","Активные","Выполненные","Удалённые").forEach{v->FilterChip(selected=filter==v,onClick={filter=v},label={Text(v,style=MaterialTheme.typography.labelSmall)})}}
             LazyColumn(Modifier.weight(1f)){
                 val shown=when(filter){
@@ -373,7 +459,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         var filter by remember { mutableStateOf("Все") }
         LaunchedEffect(Unit){Thread{val x=AlphaDatabase.get(this@MainActivity).history().all();runOnUiThread{events=x}}.start()}
         Column(Modifier.fillMaxSize().padding(18.dp)) {
-            Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick={onSection("reminders")}){Text("←",style=MaterialTheme.typography.headlineSmall)};Text("История",style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f),textAlign=androidx.compose.ui.text.style.TextAlign.Center);Spacer(Modifier.width(48.dp))}
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){BackButton{onSection("reminders")};Text("История",style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f),textAlign=androidx.compose.ui.text.style.TextAlign.Center,color=canonicalDarkBlue);Spacer(Modifier.width(42.dp))}
             Row{listOf("Все","Выполненные","Пропущенные","Отменённые").forEach{v->FilterChip(selected=filter==v,onClick={filter=v},label={Text(v)})}}
             LazyColumn(Modifier.weight(1f)){items(events.filter{filter=="Все"||historyLabel(it.status)==filter},key={it.id}){h->
                 Row(Modifier.fillMaxWidth().padding(vertical=10.dp)){Text(if(h.status==HistoryEventEntity.COMPLETED)"✓" else if(h.status==HistoryEventEntity.MISSED)"×" else "−",style=MaterialTheme.typography.headlineSmall);Spacer(Modifier.width(12.dp));Column{Text(h.reminderText);Text(format(h.scheduledAt)+"   "+historyLabel(h.status),style=MaterialTheme.typography.bodySmall)}};HorizontalDivider()
@@ -384,15 +470,15 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     private fun historyLabel(s:String)=when(s){HistoryEventEntity.COMPLETED->"Выполненные";HistoryEventEntity.MISSED->"Пропущенные";else->"Отменённые"}
 
     @Composable private fun DeleteDialog(onCancel:()->Unit,onDelete:()->Unit) {
-        AlertDialog(onDismissRequest=onCancel,title={Text("Подтверждение удаления")},text={Text("Удалить это напоминание?\nОно больше не будет появляться.")},confirmButton={Button(onClick=onDelete,colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.error)){Text("Удалить")}},dismissButton={OutlinedButton(onClick=onCancel){Text("Отмена")}})
+        AlertDialog(onDismissRequest=onCancel,title={Text("Подтверждение удаления",color=canonicalDarkBlue)},icon={Icon(Icons.Outlined.Delete,contentDescription=null,tint=canonicalRed,modifier=Modifier.size(36.dp))},text={Text("Удалить это напоминание?\nОно больше не будет появляться.")},confirmButton={Button(onClick=onDelete,colors=ButtonDefaults.buttonColors(containerColor=canonicalRed)){Text("Удалить")}},dismissButton={OutlinedButton(onClick=onCancel){Text("Отмена")}})
     }
 
     @Composable
     private fun BottomNav(section:String,onSection:(String)->Unit) {
-        NavigationBar {
-            NavigationBarItem(selected=section=="reminders",onClick={onSection("reminders")},icon={Text("⌂")},label={Text("Напоминания")})
-            NavigationBarItem(selected=section=="history",onClick={onSection("history")},icon={Text("◷")},label={Text("История")})
-            NavigationBarItem(selected=section=="settings",onClick={onSection("settings")},icon={Text("⚙")},label={Text("Настройки")})
+        NavigationBar(containerColor=Color.White) {
+            NavigationBarItem(selected=section=="reminders",onClick={onSection("reminders")},icon={Icon(Icons.Filled.Home,contentDescription=null,modifier=Modifier.size(30.dp))},label={Text("Напоминания")},colors=NavigationBarItemDefaults.colors(selectedIconColor=canonicalBlue,selectedTextColor=canonicalBlue,indicatorColor=canonicalPaleBlue))
+            NavigationBarItem(selected=section=="history",onClick={onSection("history")},icon={Icon(Icons.Filled.History,contentDescription=null,modifier=Modifier.size(30.dp))},label={Text("История")},colors=NavigationBarItemDefaults.colors(selectedIconColor=canonicalBlue,selectedTextColor=canonicalBlue,indicatorColor=canonicalPaleBlue))
+            NavigationBarItem(selected=section=="settings",onClick={onSection("settings")},icon={Icon(Icons.Filled.Settings,contentDescription=null,modifier=Modifier.size(30.dp))},label={Text("Настройки")},colors=NavigationBarItemDefaults.colors(selectedIconColor=canonicalBlue,selectedTextColor=canonicalBlue,indicatorColor=canonicalPaleBlue))
         }
     }
 
@@ -439,10 +525,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         Thread {
             val dao=AlphaDatabase.get(this).reminders()
             val current=dao.get(r.id)?:return@Thread
-            val newDue=dateMillis?.let {
-                val old=Instant.ofEpochMilli(current.dueAt).atZone(ZoneId.systemDefault()).toLocalTime()
-                Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate().atTime(old).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            }?:current.dueAt
+            val newDue=dateMillis?:current.dueAt
             ReminderScheduler.cancel(this,current.id)
             val updated=current.copy(dueAt=newDue,originalDueAt=newDue,recurrenceMinutes=if(daily)1440L else null,active=true,lastFiredAt=null,acknowledged=false)
             dao.update(updated);ReminderScheduler.schedule(this,updated)
