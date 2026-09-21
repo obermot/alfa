@@ -93,18 +93,24 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         var selected by remember { mutableStateOf<ReminderEntity?>(null) }
         var section by remember { mutableStateOf("reminders") }
         var scheduleFor by remember { mutableStateOf<ReminderEntity?>(null) }
-        BackHandler(enabled = scheduleFor != null || selected != null || section != "reminders") {
-            when { scheduleFor != null -> scheduleFor = null; selected != null -> selected = null; else -> section = "reminders" }
+        var editTextFor by remember { mutableStateOf<ReminderEntity?>(null) }
+        var editNoteFor by remember { mutableStateOf<ReminderEntity?>(null) }
+        BackHandler(enabled = scheduleFor != null || editTextFor != null || editNoteFor != null || selected != null || section != "reminders") {
+            when { scheduleFor != null -> scheduleFor = null; editTextFor != null -> editTextFor=null; editNoteFor != null -> editNoteFor=null; selected != null -> selected = null; else -> section = "reminders" }
         }
 
         MaterialTheme {
             Surface(Modifier.fillMaxSize()) {
                 when {
+                    editTextFor != null -> TextEditScreen("Что напомнить?",editTextFor!!.text,{editTextFor=null}){v->updateReminderText(editTextFor!!,v);selected=editTextFor!!.copy(text=v);editTextFor=null}
+                    editNoteFor != null -> TextEditScreen("Заметка",prefs.getString("note_${editNoteFor!!.id}","").orEmpty(),{editNoteFor=null}){v->prefs.edit().putString("note_${editNoteFor!!.id}",v).apply();editNoteFor=null}
                     scheduleFor != null -> ScheduleScreen(scheduleFor!!, onBack = { scheduleFor = null })
                     selected != null -> ReminderEditor(
                         reminder = selected!!,
                         onBack = { selected = null },
                         onSchedule = { scheduleFor = selected },
+                        onEditText = { editTextFor = selected },
+                        onEditNote = { editNoteFor = selected },
                         onDelete = {
                             deleteReminder(selected!!)
                             selected = null
@@ -197,20 +203,31 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     }
 
     @Composable
-    private fun ReminderEditor(reminder:ReminderEntity,onBack:()->Unit,onSchedule:()->Unit,onDelete:()->Unit) {
+    private fun ReminderEditor(reminder:ReminderEntity,onBack:()->Unit,onSchedule:()->Unit,onEditText:()->Unit,onEditNote:()->Unit,onDelete:()->Unit) {
         var confirmDelete by remember { mutableStateOf(false) }
         if(confirmDelete) DeleteDialog(onCancel={confirmDelete=false},onDelete=onDelete)
         Column(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
             TextButton(onClick=onBack){Text("←")}
             Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){Text(semanticIcon(reminder.text),style=MaterialTheme.typography.headlineMedium);Spacer(Modifier.width(12.dp));Text(reminder.text,style=MaterialTheme.typography.titleLarge)}
-            EditorLine("💬","Что напомнить?",reminder.text,{})
+            EditorLine("●","Что напомнить?",reminder.text,onEditText)
             EditorLine("▣","Когда напомнить?",format(reminder.dueAt),onSchedule)
             EditorLine("↻","Повторять напоминание?",if(reminder.recurrenceMinutes==1440L)"Каждый день" else "Не задано",onSchedule)
-            Text("🔊   Громкость"); Slider(value=1f,onValueChange={})
-            EditorLine("▣","Заметка","(необязательно)",{})
+            var localVolume by remember { mutableFloatStateOf(prefs.getFloat("volume_${reminder.id}",prefs.getFloat("reminder_volume",1f))) }; Text("●   Громкость"); Slider(value=localVolume,onValueChange={localVolume=it;prefs.edit().putFloat("volume_${reminder.id}",it).apply()})
+            EditorLine("●","Заметка",prefs.getString("note_${reminder.id}","").orEmpty().ifBlank{"(необязательно)"},onEditNote)
             Spacer(Modifier.weight(1f))
             Button(onClick=onBack,modifier=Modifier.fillMaxWidth().height(54.dp)){Text("Сохранить")}
             Button(onClick={confirmDelete=true},modifier=Modifier.fillMaxWidth().height(54.dp),colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.errorContainer,contentColor=MaterialTheme.colorScheme.error)){Text("🗑  Удалить напоминание")}
+        }
+    }
+
+    @Composable
+    private fun TextEditScreen(title:String,initial:String,onBack:()->Unit,onSave:(String)->Unit) {
+        var value by remember { mutableStateOf(initial) }
+        Column(Modifier.fillMaxSize().padding(18.dp)) {
+            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick=onBack){Text("←",style=MaterialTheme.typography.headlineSmall)};Text(title,style=MaterialTheme.typography.titleLarge)}
+            OutlinedTextField(value=value,onValueChange={value=it},modifier=Modifier.fillMaxWidth(),minLines=3)
+            Spacer(Modifier.weight(1f))
+            Button(onClick={onSave(value.trim())},enabled=value.isNotBlank(),modifier=Modifier.fillMaxWidth().height(54.dp)){Text("Сохранить")}
         }
     }
 
@@ -369,6 +386,11 @@ class MainActivity : ComponentActivity(), RecognitionListener {
             NavigationBarItem(selected=section=="history",onClick={onSection("history")},icon={Text("◷")},label={Text("История")})
             NavigationBarItem(selected=section=="settings",onClick={onSection("settings")},icon={Text("⚙")},label={Text("Настройки")})
         }
+    }
+
+    private fun updateReminderText(r:ReminderEntity,text:String) {
+        if(text.isBlank()) return
+        Thread { val dao=AlphaDatabase.get(this).reminders();val cur=dao.get(r.id)?:return@Thread;dao.update(cur.copy(text=text));runOnUiThread{refresh()} }.start()
     }
 
     private fun setReminderEnabled(r:ReminderEntity,active:Boolean) {
