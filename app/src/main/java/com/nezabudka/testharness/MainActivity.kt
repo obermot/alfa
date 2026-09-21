@@ -17,6 +17,7 @@ import android.speech.tts.UtteranceProgressListener
 import android.widget.NumberPicker
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.background
@@ -427,7 +428,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         var filter by remember { mutableStateOf("Все") }
         LaunchedEffect(reminders){ Thread{ val x=AlphaDatabase.get(this@MainActivity).reminders().all();runOnUiThread{all=x} }.start() }
         Column(Modifier.fillMaxSize().padding(18.dp)) {
-            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick=onBack){Text("←")};Text("Все напоминания",style=MaterialTheme.typography.titleLarge)}
+            Row(verticalAlignment=Alignment.CenterVertically){BackButton(onBack);Spacer(Modifier.width(10.dp));Text("Все напоминания",style=MaterialTheme.typography.titleLarge,color=canonicalDarkBlue)}
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(4.dp)){listOf("Все","Активные","Выполненные","Удалённые").forEach{v->FilterChip(selected=filter==v,onClick={filter=v},label={Text(v,style=MaterialTheme.typography.labelSmall)})}}
             LazyColumn(Modifier.weight(1f)){
                 val shown=when(filter){
@@ -448,7 +449,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         var filter by remember { mutableStateOf("Все") }
         LaunchedEffect(Unit){Thread{val x=AlphaDatabase.get(this@MainActivity).history().all();runOnUiThread{events=x}}.start()}
         Column(Modifier.fillMaxSize().padding(18.dp)) {
-            Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick={onSection("reminders")}){Text("←",style=MaterialTheme.typography.headlineSmall)};Text("История",style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f),textAlign=androidx.compose.ui.text.style.TextAlign.Center);Spacer(Modifier.width(48.dp))}
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){BackButton{onSection("reminders")};Text("История",style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f),textAlign=androidx.compose.ui.text.style.TextAlign.Center,color=canonicalDarkBlue);Spacer(Modifier.width(42.dp))}
             Row{listOf("Все","Выполненные","Пропущенные","Отменённые").forEach{v->FilterChip(selected=filter==v,onClick={filter=v},label={Text(v)})}}
             LazyColumn(Modifier.weight(1f)){items(events.filter{filter=="Все"||historyLabel(it.status)==filter},key={it.id}){h->
                 Row(Modifier.fillMaxWidth().padding(vertical=10.dp)){Text(if(h.status==HistoryEventEntity.COMPLETED)"✓" else if(h.status==HistoryEventEntity.MISSED)"×" else "−",style=MaterialTheme.typography.headlineSmall);Spacer(Modifier.width(12.dp));Column{Text(h.reminderText);Text(format(h.scheduledAt)+"   "+historyLabel(h.status),style=MaterialTheme.typography.bodySmall)}};HorizontalDivider()
@@ -459,15 +460,15 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     private fun historyLabel(s:String)=when(s){HistoryEventEntity.COMPLETED->"Выполненные";HistoryEventEntity.MISSED->"Пропущенные";else->"Отменённые"}
 
     @Composable private fun DeleteDialog(onCancel:()->Unit,onDelete:()->Unit) {
-        AlertDialog(onDismissRequest=onCancel,title={Text("Подтверждение удаления")},text={Text("Удалить это напоминание?\nОно больше не будет появляться.")},confirmButton={Button(onClick=onDelete,colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.error)){Text("Удалить")}},dismissButton={OutlinedButton(onClick=onCancel){Text("Отмена")}})
+        AlertDialog(onDismissRequest=onCancel,title={Text("Подтверждение удаления",color=canonicalDarkBlue)},icon={Icon(Icons.Outlined.Delete,contentDescription=null,tint=canonicalRed,modifier=Modifier.size(36.dp))},text={Text("Удалить это напоминание?\nОно больше не будет появляться.")},confirmButton={Button(onClick=onDelete,colors=ButtonDefaults.buttonColors(containerColor=canonicalRed)){Text("Удалить")}},dismissButton={OutlinedButton(onClick=onCancel){Text("Отмена")}})
     }
 
     @Composable
     private fun BottomNav(section:String,onSection:(String)->Unit) {
-        NavigationBar {
-            NavigationBarItem(selected=section=="reminders",onClick={onSection("reminders")},icon={Text("⌂")},label={Text("Напоминания")})
-            NavigationBarItem(selected=section=="history",onClick={onSection("history")},icon={Text("◷")},label={Text("История")})
-            NavigationBarItem(selected=section=="settings",onClick={onSection("settings")},icon={Text("⚙")},label={Text("Настройки")})
+        NavigationBar(containerColor=Color.White) {
+            NavigationBarItem(selected=section=="reminders",onClick={onSection("reminders")},icon={Icon(Icons.Filled.Home,contentDescription=null,modifier=Modifier.size(30.dp))},label={Text("Напоминания")},colors=NavigationBarItemDefaults.colors(selectedIconColor=canonicalBlue,selectedTextColor=canonicalBlue,indicatorColor=canonicalPaleBlue))
+            NavigationBarItem(selected=section=="history",onClick={onSection("history")},icon={Icon(Icons.Filled.History,contentDescription=null,modifier=Modifier.size(30.dp))},label={Text("История")},colors=NavigationBarItemDefaults.colors(selectedIconColor=canonicalBlue,selectedTextColor=canonicalBlue,indicatorColor=canonicalPaleBlue))
+            NavigationBarItem(selected=section=="settings",onClick={onSection("settings")},icon={Icon(Icons.Filled.Settings,contentDescription=null,modifier=Modifier.size(30.dp))},label={Text("Настройки")},colors=NavigationBarItemDefaults.colors(selectedIconColor=canonicalBlue,selectedTextColor=canonicalBlue,indicatorColor=canonicalPaleBlue))
         }
     }
 
@@ -514,10 +515,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         Thread {
             val dao=AlphaDatabase.get(this).reminders()
             val current=dao.get(r.id)?:return@Thread
-            val newDue=dateMillis?.let {
-                val old=Instant.ofEpochMilli(current.dueAt).atZone(ZoneId.systemDefault()).toLocalTime()
-                Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate().atTime(old).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            }?:current.dueAt
+            val newDue=dateMillis?:current.dueAt
             ReminderScheduler.cancel(this,current.id)
             val updated=current.copy(dueAt=newDue,originalDueAt=newDue,recurrenceMinutes=if(daily)1440L else null,active=true,lastFiredAt=null,acknowledged=false)
             dao.update(updated);ReminderScheduler.schedule(this,updated)
