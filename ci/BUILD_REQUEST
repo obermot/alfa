@@ -1,3 +1,3 @@
-control-build-2026-09-21-ui-4
-Nezabudka alpha 0.2.7 canonical working UI
-Reason: compile canonical screens, history, settings, snooze and alarm interaction fixes.
+control-build-2026-09-21-ui-5
+Nezabudka alpha 0.2.8 phone-test fixes
+Reason: back navigation, enable/disable semantics, settings controls, history behavior and voice answer listener.
