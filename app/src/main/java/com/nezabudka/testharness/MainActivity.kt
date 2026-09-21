@@ -18,10 +18,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.activity.compose.BackHandler
@@ -29,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import org.json.JSONObject
@@ -99,8 +107,8 @@ class MainActivity : ComponentActivity(), RecognitionListener {
             when { scheduleFor != null -> scheduleFor = null; editTextFor != null -> editTextFor=null; editNoteFor != null -> editNoteFor=null; selected != null -> selected = null; else -> section = "reminders" }
         }
 
-        MaterialTheme {
-            Surface(Modifier.fillMaxSize()) {
+        MaterialTheme(colorScheme = lightColorScheme(primary=Color(0xFF087BFF),secondary=Color(0xFF087BFF),surface=Color.White,background=Color.White)) {
+            Surface(Modifier.fillMaxSize(), color=Color.White) {
                 when {
                     editTextFor != null -> TextEditScreen("Что напомнить?",editTextFor!!.text,{editTextFor=null}){v->updateReminderText(editTextFor!!,v);selected=editTextFor!!.copy(text=v);editTextFor=null}
                     editNoteFor != null -> TextEditScreen("Заметка",prefs.getString("note_${editNoteFor!!.id}","").orEmpty(),{editNoteFor=null}){v->prefs.edit().putString("note_${editNoteFor!!.id}",v).apply();editNoteFor=null}
@@ -139,66 +147,107 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         }
     }
 
+    private val canonicalBlue = Color(0xFF087BFF)
+    private val canonicalDarkBlue = Color(0xFF001C8F)
+    private val canonicalPaleBlue = Color(0xFFEAF4FF)
+    private val canonicalRed = Color(0xFFFF1F24)
+
+    @Composable
+    private fun BackButton(onClick:()->Unit) {
+        IconButton(onClick=onClick,modifier=Modifier.size(42.dp).background(canonicalPaleBlue,CircleShape)) {
+            Icon(Icons.Filled.ArrowBack,contentDescription="Назад",tint=canonicalBlue,modifier=Modifier.size(28.dp))
+        }
+    }
+
     @Composable
     private fun HomeScreen(
         text: String, onText: (String) -> Unit, onSend: () -> Unit, onMic: () -> Unit,
         onReminder: (ReminderEntity) -> Unit, onAll: () -> Unit,
         section: String, onSection: (String) -> Unit
     ) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp)) {
-            Text("✿  Незабудка", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF006BFF))
-            Text("Ваши напоминания", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(18.dp))
-            Text(if (userName.isBlank()) "Что вам напомнить?" else "$userName,\nчто вам напомнить?", style = MaterialTheme.typography.headlineSmall)
+        Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 10.dp)) {
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                Box(Modifier.size(54.dp).background(canonicalPaleBlue,RoundedCornerShape(13.dp)),contentAlignment=Alignment.Center) {
+                    Icon(Icons.Filled.LocalFlorist,contentDescription="Логотип Незабудки",tint=canonicalBlue,modifier=Modifier.size(42.dp))
+                }
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text("Незабудка",style=MaterialTheme.typography.headlineSmall,color=canonicalBlue)
+                    Text("Ваши напоминания",style=MaterialTheme.typography.bodySmall,color=canonicalDarkBlue)
+                }
+            }
             Spacer(Modifier.height(14.dp))
-            Button(onClick = onMic, modifier = Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally).size(82.dp), shape = androidx.compose.foundation.shape.CircleShape) {
-                Text(if (listening) "■" else "🎙", style = MaterialTheme.typography.headlineMedium)
+            Text(if (userName.isBlank()) "Что вам напомнить?" else "$userName,\nчто вам напомнить?", style = MaterialTheme.typography.headlineSmall,color=canonicalDarkBlue)
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick=onMic,
+                modifier=Modifier.align(Alignment.CenterHorizontally).size(88.dp),
+                shape=CircleShape,
+                contentPadding=PaddingValues(0.dp),
+                colors=ButtonDefaults.buttonColors(containerColor=canonicalBlue)
+            ) {
+                Icon(if(listening) Icons.Filled.Stop else Icons.Filled.Mic,contentDescription="Микрофон",tint=Color.White,modifier=Modifier.size(48.dp))
             }
-            Text("Нажмите и скажите,\nили", modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall, modifier=Modifier.fillMaxWidth(), textAlign=androidx.compose.ui.text.style.TextAlign.Center)
+            Spacer(Modifier.height(8.dp))
+            Text("Нажмите и скажите,\nили", modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center,color=canonicalDarkBlue)
+            if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall, modifier=Modifier.fillMaxWidth(), textAlign=androidx.compose.ui.text.style.TextAlign.Center,color=canonicalDarkBlue)
             OutlinedTextField(
-                value=text, onValueChange=onText, placeholder={Text("Написать напоминание…")},
-                trailingIcon={ if(text.isNotBlank()) TextButton(onClick=onSend){Text("➜")} },
-                singleLine=true, modifier=Modifier.fillMaxWidth()
+                value=text,onValueChange=onText,placeholder={Text("Написать напоминание…")},
+                leadingIcon={Icon(Icons.Outlined.Image,contentDescription=null,tint=canonicalBlue)},
+                trailingIcon={if(text.isNotBlank()) IconButton(onClick=onSend){Icon(Icons.Filled.Send,contentDescription="Отправить",tint=canonicalBlue)}},
+                singleLine=true,modifier=Modifier.fillMaxWidth(),
+                shape=RoundedCornerShape(8.dp),
+                colors=OutlinedTextFieldDefaults.colors(focusedBorderColor=canonicalBlue,unfocusedBorderColor=Color(0xFF8FC8FF))
             )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween, verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
-                Text("Ближайшие напоминания", style=MaterialTheme.typography.titleMedium)
-                TextButton(onClick=onAll){Text("Все ›")}
+            Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween, verticalAlignment=Alignment.CenterVertically) {
+                Text("Ближайшие напоминания",style=MaterialTheme.typography.titleMedium,color=canonicalDarkBlue)
+                TextButton(onClick=onAll){Text("Все ›",color=canonicalBlue)}
             }
-            LazyColumn(Modifier.weight(1f)) {
-                items(allReminders.take(6), key={it.id}) { r -> ReminderRow(r, onReminder) }
-            }
+            LazyColumn(Modifier.weight(1f)) { items(allReminders.take(6),key={it.id}){r->ReminderRow(r,onReminder)} }
             BottomNav(section,onSection)
         }
     }
 
     @Composable
-    private fun ReminderRow(r: ReminderEntity, onReminder:(ReminderEntity)->Unit) {
-        Row(
-            Modifier.fillMaxWidth().pointerInput(r.id){ detectTapGestures(onTap={onReminder(r)}) }.padding(vertical=8.dp),
-            verticalAlignment=androidx.compose.ui.Alignment.CenterVertically
-        ) {
-            Text(semanticIcon(r.text), style=MaterialTheme.typography.headlineSmall)
+    private fun ReminderRow(r: ReminderEntity,onReminder:(ReminderEntity)->Unit) {
+        Row(Modifier.fillMaxWidth().pointerInput(r.id){detectTapGestures(onTap={onReminder(r)})}.padding(vertical=7.dp),verticalAlignment=Alignment.CenterVertically) {
+            Icon(reminderIcon(r.text),contentDescription=null,tint=reminderIconColor(r.text),modifier=Modifier.size(34.dp))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(r.text, style=MaterialTheme.typography.titleMedium)
-                Text(format(r.dueAt), style=MaterialTheme.typography.bodySmall)
+                Text(r.text,style=MaterialTheme.typography.titleMedium,color=canonicalDarkBlue)
+                Text(format(r.dueAt),style=MaterialTheme.typography.bodySmall,color=Color(0xFF555B86))
             }
-            Switch(checked=r.active,onCheckedChange={setReminderEnabled(r,it)})
-            TextButton(onClick={deleteReminder(r)}, modifier=Modifier.size(58.dp)){Text("▥", color=Color.Red, style=MaterialTheme.typography.headlineMedium)}
+            Switch(
+                checked=r.active,onCheckedChange={setReminderEnabled(r,it)},
+                colors=SwitchDefaults.colors(checkedThumbColor=Color.White,checkedTrackColor=canonicalBlue,uncheckedThumbColor=Color.White,uncheckedTrackColor=Color(0xFFD7DEEA))
+            )
+            IconButton(onClick={deleteReminder(r)},modifier=Modifier.size(48.dp)) {
+                Icon(Icons.Outlined.Delete,contentDescription="Удалить",tint=canonicalRed,modifier=Modifier.size(30.dp))
+            }
         }
-        HorizontalDivider()
+        HorizontalDivider(color=Color(0xFFE7EAF0))
     }
 
-    private fun semanticIcon(text:String):String {
+    private fun reminderIcon(text:String):ImageVector {
         val s=text.lowercase()
         return when {
-            "таблет" in s || "лекар" in s -> "💊"
-            "позвон" in s || "врач" in s -> "☎"
-            "трен" in s -> "🏋"
-            "куп" in s || "продукт" in s -> "🛒"
-            "читать" in s || "книг" in s -> "📖"
-            else -> "🔔"
+            "таблет" in s || "лекар" in s -> Icons.Filled.Medication
+            "позвон" in s || "врач" in s -> Icons.Filled.Phone
+            "трен" in s -> Icons.Filled.FitnessCenter
+            "куп" in s || "продукт" in s -> Icons.Filled.ShoppingCart
+            "читать" in s || "книг" in s -> Icons.Filled.MenuBook
+            "давлен" in s -> Icons.Filled.Favorite
+            else -> Icons.Filled.Notifications
+        }
+    }
+
+    private fun reminderIconColor(text:String):Color {
+        val s=text.lowercase()
+        return when {
+            "таблет" in s || "лекар" in s -> canonicalBlue
+            "позвон" in s || "врач" in s -> Color(0xFF08A94F)
+            "давлен" in s -> canonicalRed
+            else -> canonicalBlue
         }
     }
 
