@@ -204,7 +204,7 @@ Repository Secrets:
 ## Phone-test correction rule (2026-09-22)
 
 - Approved overall mockup remains the direct visual source of truth. Use its colors, icon appearance, icon scale, spacing and screen composition; do not substitute arbitrary emoji or tiny text glyphs for canonical pictograms.
-- Screen 3 must support multiple selected dates and per-date hour/minute controls, with Selected dates and time / Change all / Add date behavior.
+- Screen 3 must support multiple selected dates and per-date hour/minute controls. The later replacement canonical mockup explicitly removes the separate Add-date action; selection is performed directly in the calendar.
 - All reminders canonical filters: Все / Активные / Выполненные / Удалённые.
 - A reminder disabled by its switch remains stored and visible; only the trash/delete flow deletes it.
 - Settings expose four languages: Русский / Українська / English / Español. DND interval must be editable.
@@ -217,3 +217,13 @@ Repository Secrets:
 - Для пиктограмм выбран официальный Google Material Icons / Material Symbols подход (Apache-2.0), а не emoji/text substitutes.
 - Светлая каноническая палитра: белый фон, насыщенный синий для primary controls/selected state, тёмно-синий для основного текста, светло-синий для secondary surfaces, красный для delete.
 - Тёмную тему не разрабатывать до отдельного решения пользователя после утверждения светлого дизайна.
+
+
+## Canonical UI replacement — 2026-09-22 (SUPERSEDES previous mockup)
+
+- The user supplied a replacement approved overall mockup image on 2026-09-22. It supersedes all earlier approved UI mockups and any contradictory UI summaries derived from them.
+- Do not use the former overall mockup for implementation decisions. The replacement image itself, including the explanatory text printed on it, is the visual/interaction source of truth.
+- Replacement screen set: 1 Главный экран; 2 Просмотр / редактирование; 3 Выбор даты и времени; 4 Настройки; 5 Список напоминаний; 6 Экран сигнала; 7 Напомнить снова; 8 История напоминаний; 9 Пропущенное напоминание; confirmation-delete modal; enlarged detailed Screen 3.
+- Screen 3 canonical rule: dates are added/removed by tapping dates directly in the calendar. Selected dates appear below with their individual time controls. Tapping an already selected date removes it. Multiple dates may span different months. There is NO separate «Добавить дату» action and no three-dot date menu in the replacement design.
+- Screen 2 navigation into the shared date/time UI has context-sensitive title: tapping «Когда напомнить?» must show «Когда напомнить?» at the top; tapping «Повторять напоминание?» must show «Повторять напоминание?».
+- Replacement Settings rows: Как к вам обращаться?; Громкость напоминаний; Мелодия; Голосовой ввод; Язык; Тема оформления; Разрешения; О приложении. The previous DND row is superseded by this replacement design.
