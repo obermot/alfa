@@ -86,7 +86,8 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
                         Spacer(Modifier.weight(1f))
                         Text(
                             text = buildString {
-                                if (name.isNotBlank()) append(name).append(",\n")
+                                if (name.isNotBlank()) append(name).append(",
+")
                                 append("пора ").append(reminderText.ifBlank { "выполнить напоминание" }.lowercase())
                             },
                             style = MaterialTheme.typography.headlineMedium,
@@ -218,7 +219,9 @@ class AlarmActivity : ComponentActivity(), RecognitionListener {
             return
         }
         stopListening()
-        if (SpeechRecognizer.isRecognitionAvailable(this)) startSystemListening()\n        else if (modelDir().exists() && !modelDir().list().isNullOrEmpty()) startVoskListening()\n        else status = "Голосовой ответ недоступен"
+        if (SpeechRecognizer.isRecognitionAvailable(this)) startSystemListening()
+        else if (modelDir().exists() && !modelDir().list().isNullOrEmpty()) startVoskListening()
+        else status = "Голосовой ответ недоступен"
     }
 
     private fun startVoskListening() {
