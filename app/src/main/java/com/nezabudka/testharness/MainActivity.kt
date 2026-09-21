@@ -89,90 +89,36 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         var text by remember { mutableStateOf("") }
         var selected by remember { mutableStateOf<ReminderEntity?>(null) }
         var section by remember { mutableStateOf("reminders") }
-        var repeatTarget by remember { mutableStateOf<ReminderEntity?>(null) }
-        var tempHours by remember { mutableIntStateOf(0) }
-        var tempMinutes by remember { mutableIntStateOf(0) }
-
-        val target = repeatTarget
-        if (target != null) {
-            AlertDialog(
-                onDismissRequest = { repeatTarget = null },
-                title = { Text("Напомнить снова") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Выберите время")
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            Column {
-                                Text("Часы")
-                                AndroidView(factory = { context ->
-                                    NumberPicker(context).apply {
-                                        minValue = 0
-                                        maxValue = 23
-                                        value = tempHours
-                                        setOnValueChangedListener { _, _, v -> tempHours = v }
-                                    }
-                                }, update = { if (it.value != tempHours) it.value = tempHours })
-                            }
-                            Column {
-                                Text("Минуты")
-                                AndroidView(factory = { context ->
-                                    NumberPicker(context).apply {
-                                        minValue = 0
-                                        maxValue = 59
-                                        value = tempMinutes
-                                        setOnValueChangedListener { _, _, v -> tempMinutes = v }
-                                    }
-                                }, update = { if (it.value != tempMinutes) it.value = tempMinutes })
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    Button(onClick = {
-                        updateRepeatInterval(target, tempHours * 60 + tempMinutes)
-                        repeatTarget = null
-                    }) { Text("Готово") }
-                },
-                dismissButton = { TextButton(onClick = { repeatTarget = null }) { Text("Отмена") } }
-            )
-        }
+        var scheduleFor by remember { mutableStateOf<ReminderEntity?>(null) }
 
         MaterialTheme {
             Surface(Modifier.fillMaxSize()) {
                 when {
+                    scheduleFor != null -> ScheduleScreen(scheduleFor!!, onBack = { scheduleFor = null })
                     selected != null -> ReminderEditor(
                         reminder = selected!!,
                         onBack = { selected = null },
-                        onRepeat = {
-                            tempHours = selected!!.repeatIntervalMinutes / 60
-                            tempMinutes = selected!!.repeatIntervalMinutes % 60
-                            repeatTarget = selected
-                        },
+                        onSchedule = { scheduleFor = selected },
                         onDelete = {
-                            cancelReminder(selected!!, "Напоминание удалено")
+                            deleteReminder(selected!!)
                             selected = null
                         }
                     )
-                    section == "history" -> SimpleSection(
-                        title = "История напоминаний",
-                        body = "История будет показывать фактические события приложения.",
-                        section = section,
-                        onSection = { section = it }
-                    )
-                    section == "settings" -> SimpleSection(
-                        title = "Настройки",
-                        body = if (userName.isBlank()) "Имя пользователя ещё не задано" else "Имя: $userName",
-                        section = section,
+                    section == "history" -> HistoryScreen(section) { section = it }
+                    section == "settings" -> SettingsScreen(section) { section = it }
+                    section == "all" -> AllRemindersScreen(
+                        onBack = { section = "reminders" },
+                        onReminder = { selected = it },
+                        section = "reminders",
                         onSection = { section = it }
                     )
                     else -> HomeScreen(
                         text = text,
                         onText = { text = it },
-                        onSend = {
-                            if (text.isNotBlank() && handle(text, fromVoice = false)) text = ""
-                        },
+                        onSend = { if (text.isNotBlank() && handle(text, fromVoice = false)) text = "" },
                         onMic = { if (listening) stopListen(clearStatus = true) else startListen() },
                         onReminder = { selected = it },
+                        onAll = { section = "all" },
                         section = section,
                         onSection = { section = it }
                     )
@@ -183,152 +129,201 @@ class MainActivity : ComponentActivity(), RecognitionListener {
 
     @Composable
     private fun HomeScreen(
-        text: String,
-        onText: (String) -> Unit,
-        onSend: () -> Unit,
-        onMic: () -> Unit,
-        onReminder: (ReminderEntity) -> Unit,
-        section: String,
-        onSection: (String) -> Unit
+        text: String, onText: (String) -> Unit, onSend: () -> Unit, onMic: () -> Unit,
+        onReminder: (ReminderEntity) -> Unit, onAll: () -> Unit,
+        section: String, onSection: (String) -> Unit
     ) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 14.dp)) {
-            Text("✿  Незабудка", style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.height(20.dp))
-            Text(
-                if (userName.isBlank()) "Что вам напомнить?" else "$userName,\\nЧТО ВАМ НАПОМНИТЬ?",
-                style = MaterialTheme.typography.titleMedium
-            )
+        Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp)) {
+            Text("🌼  Незабудка", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+            Text("Ваши напоминания", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(18.dp))
+            Text(if (userName.isBlank()) "Что вам напомнить?" else "$userName,\nчто вам напомнить?", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(14.dp))
-            Button(onClick = onMic, modifier = Modifier.fillMaxWidth()) {
-                Text(if (listening) "■  Слушаю…" else "●  Нажмите и скажите")
+            Button(onClick = onMic, modifier = Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally).size(82.dp), shape = androidx.compose.foundation.shape.CircleShape) {
+                Text(if (listening) "■" else "🎙", style = MaterialTheme.typography.headlineMedium)
             }
-            if (status.isNotBlank()) {
-                Spacer(Modifier.height(6.dp))
-                Text(status, style = MaterialTheme.typography.bodySmall)
-            }
-            Spacer(Modifier.height(10.dp))
+            Text("Нажмите и скажите,\nили", modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall, modifier=Modifier.fillMaxWidth(), textAlign=androidx.compose.ui.text.style.TextAlign.Center)
             OutlinedTextField(
-                value = text,
-                onValueChange = onText,
-                placeholder = { Text("Написать напоминание…") },
-                trailingIcon = { if (text.isNotBlank()) TextButton(onClick = onSend) { Text("➜") } },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                value=text, onValueChange=onText, placeholder={Text("Написать напоминание…")},
+                trailingIcon={ if(text.isNotBlank()) TextButton(onClick=onSend){Text("➜")} },
+                singleLine=true, modifier=Modifier.fillMaxWidth()
             )
-            Spacer(Modifier.height(18.dp))
-            Text("Ближайшие напоминания", style = MaterialTheme.typography.titleMedium)
-            if (reminders.isEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                Text("Нет ближайших напоминаний", style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.weight(1f))
-            } else {
-                LazyColumn(Modifier.weight(1f)) {
-                    items(reminders, key = { it.id }) { r ->
-                        Card(
-                            onClick = { onReminder(r) },
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                        ) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text(r.text, style = MaterialTheme.typography.titleSmall)
-                                Text(format(r.dueAt), style = MaterialTheme.typography.bodySmall)
-                                if (r.lastFiredAt != null) {
-                                    Text("Ожидает подтверждения", style = MaterialTheme.typography.bodySmall)
-                                    TextButton(onClick = { openAlarm(r) }) { Text("Открыть") }
-                                }
-                            }
-                        }
-                    }
-                }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween, verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+                Text("Ближайшие напоминания", style=MaterialTheme.typography.titleMedium)
+                TextButton(onClick=onAll){Text("Все ›")}
             }
-            BottomNav(section, onSection)
+            LazyColumn(Modifier.weight(1f)) {
+                items(reminders.take(6), key={it.id}) { r -> ReminderRow(r, onReminder) }
+            }
+            BottomNav(section,onSection)
         }
     }
 
     @Composable
-    private fun ReminderEditor(
-        reminder: ReminderEntity,
-        onBack: () -> Unit,
-        onRepeat: () -> Unit,
-        onDelete: () -> Unit
-    ) {
+    private fun ReminderRow(r: ReminderEntity, onReminder:(ReminderEntity)->Unit) {
+        Row(
+            Modifier.fillMaxWidth().pointerInput(r.id){ detectTapGestures(onTap={onReminder(r)}) }.padding(vertical=8.dp),
+            verticalAlignment=androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Text(semanticIcon(r.text), style=MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(r.text, style=MaterialTheme.typography.titleMedium)
+                Text(format(r.dueAt), style=MaterialTheme.typography.bodySmall)
+            }
+            Switch(checked=r.active,onCheckedChange={toggleReminder(r,it)})
+            TextButton(onClick={deleteReminder(r)}){Text("🗑")}
+        }
+        HorizontalDivider()
+    }
+
+    private fun semanticIcon(text:String):String {
+        val s=text.lowercase()
+        return when {
+            "таблет" in s || "лекар" in s -> "💊"
+            "позвон" in s || "врач" in s -> "☎"
+            "трен" in s -> "🏋"
+            "куп" in s || "продукт" in s -> "🛒"
+            "читать" in s || "книг" in s -> "📖"
+            else -> "🔔"
+        }
+    }
+
+    @Composable
+    private fun ReminderEditor(reminder:ReminderEntity,onBack:()->Unit,onSchedule:()->Unit,onDelete:()->Unit) {
         var confirmDelete by remember { mutableStateOf(false) }
-        if (confirmDelete) {
-            AlertDialog(
-                onDismissRequest = { confirmDelete = false },
-                title = { Text("Удалить это напоминание?") },
-                text = { Text("Оно больше не будет появляться.") },
-                confirmButton = { Button(onClick = onDelete) { Text("Удалить") } },
-                dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Отмена") } }
-            )
-        }
-        Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextButton(onClick = onBack) { Text("‹  Назад") }
-            Text(reminder.text, style = MaterialTheme.typography.headlineSmall)
-            HorizontalDivider()
-            Text("Что напомнить?")
-            Text(reminder.text)
-            HorizontalDivider()
-            Text("Когда напомнить?")
-            Text(format(reminder.dueAt))
-            HorizontalDivider()
-            TextButton(onClick = onRepeat, modifier = Modifier.fillMaxWidth()) {
-                Text("Повторять напоминание?   " + ReminderRepeatSettings.compactLabel(reminder.repeatIntervalMinutes))
-            }
-            HorizontalDivider()
-            Text("Громкость")
-            Slider(value = 1f, onValueChange = { })
-            OutlinedTextField(
-                value = "",
-                onValueChange = {},
-                label = { Text("Заметка (необязательно)") },
-                modifier = Modifier.fillMaxWidth()
-            )
+        if(confirmDelete) DeleteDialog(onCancel={confirmDelete=false},onDelete=onDelete)
+        Column(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick=onBack){Text("←")}
+            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){Text(semanticIcon(reminder.text),style=MaterialTheme.typography.headlineMedium);Spacer(Modifier.width(12.dp));Text(reminder.text,style=MaterialTheme.typography.titleLarge)}
+            EditorLine("💬","Что напомнить?",reminder.text,{})
+            EditorLine("▣","Когда напомнить?",format(reminder.dueAt),onSchedule)
+            EditorLine("↻","Повторять напоминание?",if(reminder.recurrenceMinutes==1440L)"Каждый день" else "Не задано",onSchedule)
+            Text("🔊   Громкость"); Slider(value=1f,onValueChange={})
+            EditorLine("▣","Заметка","(необязательно)",{})
             Spacer(Modifier.weight(1f))
-            Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Сохранить") }
-            TextButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("Удалить напоминание")
-            }
+            Button(onClick=onBack,modifier=Modifier.fillMaxWidth().height(54.dp)){Text("Сохранить")}
+            Button(onClick={confirmDelete=true},modifier=Modifier.fillMaxWidth().height(54.dp),colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.errorContainer,contentColor=MaterialTheme.colorScheme.error)){Text("🗑  Удалить напоминание")}
         }
     }
 
+    @Composable private fun EditorLine(icon:String,title:String,value:String,onClick:()->Unit) {
+        Row(Modifier.fillMaxWidth().pointerInput(title){detectTapGestures(onTap={onClick()})}.padding(vertical=9.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
+            Text(icon,style=MaterialTheme.typography.titleLarge);Spacer(Modifier.width(12.dp));Column(Modifier.weight(1f)){Text(title);Text(value,color=MaterialTheme.colorScheme.onSurfaceVariant)};Text("›")
+        };HorizontalDivider()
+    }
+
     @Composable
-    private fun SimpleSection(
-        title: String,
-        body: String,
-        section: String,
-        onSection: (String) -> Unit
-    ) {
+    private fun ScheduleScreen(reminder:ReminderEntity,onBack:()->Unit) {
+        var daily by remember { mutableStateOf(reminder.recurrenceMinutes==1440L) }
+        val picker=rememberDatePickerState(initialSelectedDateMillis=reminder.dueAt)
         Column(Modifier.fillMaxSize().padding(18.dp)) {
-            Text(title, style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.height(18.dp))
-            Text(body)
+            TextButton(onClick=onBack){Text("←")}
+            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){RadioButton(selected=daily,onClick={daily=true});Text("Каждый день")}
+            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){RadioButton(selected=!daily,onClick={daily=false});Text("Выбрать дату и время")}
+            if(!daily) DatePicker(state=picker,showModeToggle=false)
             Spacer(Modifier.weight(1f))
-            BottomNav(section, onSection)
+            Button(onClick={
+                val selected=picker.selectedDateMillis
+                updateSchedule(reminder,daily,selected)
+                onBack()
+            },modifier=Modifier.fillMaxWidth().height(54.dp)){Text("Готово")}
         }
     }
 
     @Composable
-    private fun BottomNav(section: String, onSection: (String) -> Unit) {
-        NavigationBar {
-            NavigationBarItem(
-                selected = section == "reminders",
-                onClick = { onSection("reminders") },
-                icon = { Text("⌂") },
-                label = { Text("Напоминания") }
-            )
-            NavigationBarItem(
-                selected = section == "history",
-                onClick = { onSection("history") },
-                icon = { Text("◷") },
-                label = { Text("История") }
-            )
-            NavigationBarItem(
-                selected = section == "settings",
-                onClick = { onSection("settings") },
-                icon = { Text("⚙") },
-                label = { Text("Настройки") }
-            )
+    private fun SettingsScreen(section:String,onSection:(String)->Unit) {
+        var volume by remember { mutableFloatStateOf(prefs.getFloat("reminder_volume",1f)) }
+        Column(Modifier.fillMaxSize().padding(18.dp)) {
+            Text("Настройки",style=MaterialTheme.typography.titleLarge,modifier=Modifier.fillMaxWidth(),textAlign=androidx.compose.ui.text.style.TextAlign.Center)
+            EditorLine("♙","Как к вам обращаться?",userName.ifBlank{"Не задано"},{})
+            Text("🔔   Громкость напоминаний");Slider(value=volume,onValueChange={volume=it;prefs.edit().putFloat("reminder_volume",it).apply()})
+            EditorLine("♫","Звук напоминания","Стандартный",{})
+            EditorLine("☾","Не беспокоить","22:00 – 07:00",{})
+            EditorLine("◎","Язык","Русский",{})
+            EditorLine("◉","Тема оформления","Светлая",{})
+            EditorLine("ⓘ","О приложении","",{})
+            Spacer(Modifier.weight(1f));BottomNav(section,onSection)
         }
+    }
+
+    @Composable
+    private fun AllRemindersScreen(onBack:()->Unit,onReminder:(ReminderEntity)->Unit,section:String,onSection:(String)->Unit) {
+        var all by remember { mutableStateOf<List<ReminderEntity>>(emptyList()) }
+        var filter by remember { mutableStateOf("Все") }
+        LaunchedEffect(reminders){ Thread{ val x=AlphaDatabase.get(this@MainActivity).reminders().all();runOnUiThread{all=x} }.start() }
+        Column(Modifier.fillMaxSize().padding(18.dp)) {
+            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick=onBack){Text("←")};Text("Все напоминания",style=MaterialTheme.typography.titleLarge)}
+            Row{listOf("Все","Активные","Выключенные").forEach{v->FilterChip(selected=filter==v,onClick={filter=v},label={Text(v)})}}
+            LazyColumn(Modifier.weight(1f)){items(all.filter{filter=="Все"||(filter=="Активные"&&it.active)||(filter=="Выключенные"&&!it.active)},key={it.id}){ReminderRow(it,onReminder)}}
+            BottomNav(section,onSection)
+        }
+    }
+
+    @Composable
+    private fun HistoryScreen(section:String,onSection:(String)->Unit) {
+        var events by remember { mutableStateOf<List<HistoryEventEntity>>(emptyList()) }
+        var filter by remember { mutableStateOf("Все") }
+        LaunchedEffect(Unit){Thread{val x=AlphaDatabase.get(this@MainActivity).history().all();runOnUiThread{events=x}}.start()}
+        Column(Modifier.fillMaxSize().padding(18.dp)) {
+            Text("История",style=MaterialTheme.typography.titleLarge,modifier=Modifier.fillMaxWidth(),textAlign=androidx.compose.ui.text.style.TextAlign.Center)
+            Row{listOf("Все","Выполненные","Пропущенные","Отменённые").forEach{v->FilterChip(selected=filter==v,onClick={filter=v},label={Text(v)})}}
+            LazyColumn(Modifier.weight(1f)){items(events.filter{filter=="Все"||historyLabel(it.status)==filter},key={it.id}){h->
+                Row(Modifier.fillMaxWidth().padding(vertical=10.dp)){Text(if(h.status==HistoryEventEntity.COMPLETED)"✓" else if(h.status==HistoryEventEntity.MISSED)"×" else "−",style=MaterialTheme.typography.headlineSmall);Spacer(Modifier.width(12.dp));Column{Text(h.reminderText);Text(format(h.scheduledAt)+"   "+historyLabel(h.status),style=MaterialTheme.typography.bodySmall)}};HorizontalDivider()
+            }}
+            BottomNav(section,onSection)
+        }
+    }
+    private fun historyLabel(s:String)=when(s){HistoryEventEntity.COMPLETED->"Выполненные";HistoryEventEntity.MISSED->"Пропущенные";else->"Отменённые"}
+
+    @Composable private fun DeleteDialog(onCancel:()->Unit,onDelete:()->Unit) {
+        AlertDialog(onDismissRequest=onCancel,title={Text("Подтверждение удаления")},text={Text("Удалить это напоминание?\nОно больше не будет появляться.")},confirmButton={Button(onClick=onDelete,colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.error)){Text("Удалить")}},dismissButton={OutlinedButton(onClick=onCancel){Text("Отмена")}})
+    }
+
+    @Composable
+    private fun BottomNav(section:String,onSection:(String)->Unit) {
+        NavigationBar {
+            NavigationBarItem(selected=section=="reminders",onClick={onSection("reminders")},icon={Text("⌂")},label={Text("Напоминания")})
+            NavigationBarItem(selected=section=="history",onClick={onSection("history")},icon={Text("◷")},label={Text("История")})
+            NavigationBarItem(selected=section=="settings",onClick={onSection("settings")},icon={Text("⚙")},label={Text("Настройки")})
+        }
+    }
+
+    private fun toggleReminder(r:ReminderEntity,active:Boolean) {
+        Thread {
+            val dao=AlphaDatabase.get(this).reminders()
+            val updated=r.copy(active=active)
+            dao.update(updated)
+            if(active) ReminderScheduler.schedule(this,updated) else ReminderScheduler.cancel(this,r.id)
+            runOnUiThread{refresh()}
+        }.start()
+    }
+
+    private fun deleteReminder(r:ReminderEntity) {
+        Thread {
+            val db=AlphaDatabase.get(this)
+            ReminderScheduler.cancel(this,r.id)
+            ReminderNotifications.cancel(this,r.id)
+            db.history().insert(HistoryEventEntity(reminderId=r.id,reminderText=r.text,scheduledAt=r.originalDueAt,status=HistoryEventEntity.CANCELLED))
+            db.reminders().delete(r)
+            runOnUiThread{refresh();status="Напоминание удалено"}
+        }.start()
+    }
+
+    private fun updateSchedule(r:ReminderEntity,daily:Boolean,dateMillis:Long?) {
+        Thread {
+            val dao=AlphaDatabase.get(this).reminders()
+            val current=dao.get(r.id)?:return@Thread
+            val newDue=dateMillis?.let {
+                val old=Instant.ofEpochMilli(current.dueAt).atZone(ZoneId.systemDefault()).toLocalTime()
+                Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate().atTime(old).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            }?:current.dueAt
+            ReminderScheduler.cancel(this,current.id)
+            val updated=current.copy(dueAt=newDue,originalDueAt=newDue,recurrenceMinutes=if(daily)1440L else null,active=true,lastFiredAt=null,acknowledged=false)
+            dao.update(updated);ReminderScheduler.schedule(this,updated)
+            runOnUiThread{refresh()}
+        }.start()
     }
 
     private fun updateRepeatInterval(reminder: ReminderEntity, minutes: Int) {
