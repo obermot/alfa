@@ -322,12 +322,12 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         }
         if(editingDate!=null || editAll) AlertDialog(
             onDismissRequest={editingDate=null;editAll=false},
-            title={Text(if(editAll)"Изменить время для всех" else "Время")},
-            text={Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
+            title={Text(if(editAll)"Время для всех выбранных дат" else "Время напоминания",color=canonicalDarkBlue)},
+            text={Column(horizontalAlignment=Alignment.CenterHorizontally){Text(if(editAll)"Изменяется время у ${selectedDates.size} выбранных дат" else editingDate?.format(DateTimeFormatter.ofPattern("d MMMM",Locale("ru"))).orEmpty(),color=Color(0xFF59618F));Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
                 AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=23;value=hour;setOnValueChangedListener{_,_,v->hour=v}}})
                 Text(":",style=MaterialTheme.typography.headlineMedium)
                 AndroidView(factory={ctx->NumberPicker(ctx).apply{minValue=0;maxValue=59;value=minute;setFormatter{String.format("%02d",it)};setOnValueChangedListener{_,_,v->minute=v}}})
-            }},
+            }}},
             confirmButton={Button(onClick={
                 val t=LocalTime.of(hour,minute)
                 times=if(editAll) selectedDates.associateWith{t} else times+(editingDate!! to t)
@@ -337,14 +337,14 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         )
 
         Column(Modifier.fillMaxSize().padding(18.dp)) {
-            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick=onBack){Text("←",style=MaterialTheme.typography.headlineSmall)};Text("Повторять напоминание?",style=MaterialTheme.typography.titleLarge)}
+            Row(verticalAlignment=Alignment.CenterVertically){BackButton(onBack);Spacer(Modifier.width(10.dp));Text("Повторять напоминание?",style=MaterialTheme.typography.titleLarge,color=canonicalDarkBlue)}
             Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){RadioButton(selected=daily,onClick={daily=true});Text("Каждый день")}
             Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){RadioButton(selected=!daily,onClick={daily=false});Text("Выбрать дату и время")}
             if(!daily) {
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
-                    TextButton(onClick={month=month.minusMonths(1)}){Text("‹")}
+                    IconButton(onClick={month=month.minusMonths(1)},modifier=Modifier.size(48.dp)){Icon(Icons.Filled.ChevronLeft,contentDescription="Предыдущий месяц",tint=canonicalDarkBlue,modifier=Modifier.size(36.dp))}
                     Text(month.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru"))).replaceFirstChar{it.titlecase(Locale("ru"))},style=MaterialTheme.typography.titleMedium)
-                    TextButton(onClick={month=month.plusMonths(1)}){Text("›")}
+                    IconButton(onClick={month=month.plusMonths(1)},modifier=Modifier.size(48.dp)){Icon(Icons.Filled.ChevronRight,contentDescription="Следующий месяц",tint=canonicalDarkBlue,modifier=Modifier.size(36.dp))}
                 }
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceAround){listOf("Пн","Вт","Ср","Чт","Пт","Сб","Вс").forEach{Text(it,style=MaterialTheme.typography.labelSmall)}}
                 val first=month.atDay(1);val offset=first.dayOfWeek.value-1;val days=month.lengthOfMonth()
@@ -357,22 +357,22 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                                 TextButton(onClick={
                                     selectedDates=LinkedHashSet(selectedDates).apply{if(chosen) remove(date) else add(date)}
                                     if(!chosen && times[date]==null) times=times+(date to initial.toLocalTime().withSecond(0).withNano(0))
-                                },modifier=Modifier.size(42.dp),colors=ButtonDefaults.textButtonColors(containerColor=if(chosen) Color(0xFF006BFF) else Color.Transparent,contentColor=if(chosen) Color.White else MaterialTheme.colorScheme.onSurface)){Text(day.toString())}
-                            } else Spacer(Modifier.size(42.dp))
+                                },modifier=Modifier.size(34.dp),contentPadding=PaddingValues(0.dp),colors=ButtonDefaults.textButtonColors(containerColor=if(chosen) Color(0xFF006BFF) else Color.Transparent,contentColor=if(chosen) Color.White else MaterialTheme.colorScheme.onSurface)){Text(day.toString())}
+                            } else Spacer(Modifier.size(34.dp))
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){Text("Выбранные даты и время",style=MaterialTheme.typography.titleMedium);TextButton(onClick={if(selectedDates.isNotEmpty())openTime(null,true)}){Text("Изменить все")}}
-                LazyColumn(Modifier.weight(1f,false)){
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){Text("Выбранные даты и время",style=MaterialTheme.typography.titleMedium,color=canonicalDarkBlue);TextButton(onClick={if(selectedDates.isNotEmpty())openTime(null,true)}){Text("Изменить все")}}
+                LazyColumn(Modifier.heightIn(max=160.dp)){
                     items(selectedDates.sorted(),key={it.toEpochDay()}){date->
                         Row(Modifier.fillMaxWidth().padding(vertical=4.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
-                            Text(date.format(DateTimeFormatter.ofPattern("d MMMM",Locale("ru"))),modifier=Modifier.weight(1f))
-                            OutlinedButton(onClick={openTime(date)}){Text((times[date]?:initial.toLocalTime()).format(DateTimeFormatter.ofPattern("HH:mm")))}
-                            TextButton(onClick={selectedDates=LinkedHashSet(selectedDates).apply{remove(date)};times=times-date}){Text("⋮",style=MaterialTheme.typography.headlineSmall)}
+                            Icon(Icons.Outlined.DateRange,contentDescription=null,tint=canonicalDarkBlue,modifier=Modifier.size(24.dp));Spacer(Modifier.width(8.dp));Text(date.format(DateTimeFormatter.ofPattern("d MMMM yyyy",Locale("ru"))),modifier=Modifier.weight(1f),color=canonicalDarkBlue)
+                            Button(onClick={openTime(date)},colors=ButtonDefaults.buttonColors(containerColor=canonicalPaleBlue,contentColor=canonicalBlue),contentPadding=PaddingValues(horizontal=12.dp,vertical=6.dp)){Text((times[date]?:initial.toLocalTime()).format(DateTimeFormatter.ofPattern("HH:mm")),style=MaterialTheme.typography.titleMedium)}
+                            IconButton(onClick={selectedDates=LinkedHashSet(selectedDates).apply{remove(date)};times=times-date},modifier=Modifier.size(36.dp)){Icon(Icons.Filled.MoreVert,contentDescription="Меню даты",tint=canonicalDarkBlue)}
                         }
                     }
                 }
-                TextButton(onClick={val d=(selectedDates.maxOrNull()?:month.atDay(1)).plusDays(1);selectedDates=LinkedHashSet(selectedDates).apply{add(d)};times=times+(d to initial.toLocalTime().withSecond(0).withNano(0));month=java.time.YearMonth.from(d)}){Text("+  Добавить дату")}
+                TextButton(onClick={val d=(selectedDates.maxOrNull()?:month.atDay(1)).plusDays(1);selectedDates=LinkedHashSet(selectedDates).apply{add(d)};times=times+(d to initial.toLocalTime().withSecond(0).withNano(0));month=java.time.YearMonth.from(d)}){Icon(Icons.Filled.AddCircle,contentDescription=null,tint=canonicalBlue);Spacer(Modifier.width(6.dp));Text("Добавить дату",color=canonicalBlue)}
             } else Spacer(Modifier.weight(1f))
             Button(onClick={
                 val pairs=if(daily) listOf(initial.toLocalDate() to initial.toLocalTime()) else selectedDates.sorted().map{it to (times[it]?:initial.toLocalTime())}
