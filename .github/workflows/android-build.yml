@@ -6,6 +6,10 @@ on:
     branches: [main]
     paths:
       - 'ci/BUILD_REQUEST'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ci/BUILD_REQUEST'
 
 concurrency:
   group: alfa-android-build
