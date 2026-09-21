@@ -63,7 +63,7 @@ class ReminderActionReceiver : BroadcastReceiver() {
                 val reminder = dao.get(id) ?: return@Thread
                 when (intent.action) {
                     ACTION_ACK -> acknowledge(context, dao, reminder)
-                    ACTION_SNOOZE -> snooze(context, dao, reminder)
+                    ACTION_SNOOZE -> snooze(context, dao, reminder, intent.getIntExtra("snooze_minutes", reminder.repeatIntervalMinutes))
                 }
             } finally {
                 ReminderNotifications.cancel(context, id)
@@ -77,6 +77,7 @@ class ReminderActionReceiver : BroadcastReceiver() {
         val recurrence = reminder.recurrenceMinutes
         if (recurrence == null) {
             dao.update(reminder.copy(active = false, acknowledged = true))
+            AlphaDatabase.get(context).history().insert(HistoryEventEntity(reminderId=reminder.id, reminderText=reminder.text, scheduledAt=reminder.originalDueAt, status=HistoryEventEntity.COMPLETED))
             return
         }
 
@@ -92,11 +93,12 @@ class ReminderActionReceiver : BroadcastReceiver() {
             active = true
         )
         dao.update(next)
+        AlphaDatabase.get(context).history().insert(HistoryEventEntity(reminderId=reminder.id, reminderText=reminder.text, scheduledAt=reminder.originalDueAt, status=HistoryEventEntity.COMPLETED))
         ReminderScheduler.schedule(context, next)
     }
 
-    private fun snooze(context: Context, dao: ReminderDao, reminder: ReminderEntity) {
-        val repeatMinutes = reminder.repeatIntervalMinutes.coerceAtLeast(0)
+    private fun snooze(context: Context, dao: ReminderDao, reminder: ReminderEntity, requestedMinutes: Int) {
+        val repeatMinutes = requestedMinutes.coerceAtLeast(0)
         if (repeatMinutes <= 0) return
 
         ReminderScheduler.cancel(context, reminder.id)
