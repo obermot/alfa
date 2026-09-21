@@ -255,35 +255,52 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     private fun ReminderEditor(reminder:ReminderEntity,onBack:()->Unit,onSchedule:()->Unit,onEditText:()->Unit,onEditNote:()->Unit,onDelete:()->Unit) {
         var confirmDelete by remember { mutableStateOf(false) }
         if(confirmDelete) DeleteDialog(onCancel={confirmDelete=false},onDelete=onDelete)
-        Column(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick=onBack){Text("←")}
-            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){Text(semanticIcon(reminder.text),style=MaterialTheme.typography.headlineMedium);Spacer(Modifier.width(12.dp));Text(reminder.text,style=MaterialTheme.typography.titleLarge)}
-            EditorLine("●","Что напомнить?",reminder.text,onEditText)
-            EditorLine("▣","Когда напомнить?",format(reminder.dueAt),onSchedule)
-            EditorLine("↻","Повторять напоминание?",if(reminder.recurrenceMinutes==1440L)"Каждый день" else "Не задано",onSchedule)
-            var localVolume by remember { mutableFloatStateOf(prefs.getFloat("volume_${reminder.id}",prefs.getFloat("reminder_volume",1f))) }; Text("●   Громкость"); Slider(value=localVolume,onValueChange={localVolume=it;prefs.edit().putFloat("volume_${reminder.id}",it).apply()})
-            EditorLine("●","Заметка",prefs.getString("note_${reminder.id}","").orEmpty().ifBlank{"(необязательно)"},onEditNote)
+        Column(Modifier.fillMaxSize().padding(18.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
+            BackButton(onBack)
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment=Alignment.CenterVertically){
+                Icon(reminderIcon(reminder.text),contentDescription=null,tint=reminderIconColor(reminder.text),modifier=Modifier.size(42.dp))
+                Spacer(Modifier.width(12.dp));Text(reminder.text,style=MaterialTheme.typography.titleLarge,color=canonicalDarkBlue)
+            }
+            EditorLine(Icons.Outlined.ChatBubbleOutline,"Что напомнить?",reminder.text,onEditText)
+            EditorLine(Icons.Outlined.DateRange,"Когда напомнить?",format(reminder.dueAt),onSchedule)
+            EditorLine(Icons.Filled.Repeat,"Повторять напоминание?",if(reminder.recurrenceMinutes==1440L)"Каждый день" else "Не задано",onSchedule)
+            var localVolume by remember { mutableFloatStateOf(prefs.getFloat("volume_${reminder.id}",prefs.getFloat("reminder_volume",1f))) }
+            Row(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically){
+                Icon(Icons.Filled.VolumeUp,contentDescription=null,tint=canonicalDarkBlue,modifier=Modifier.size(30.dp));Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)){Text("Громкость",color=canonicalDarkBlue);Slider(value=localVolume,onValueChange={localVolume=it;prefs.edit().putFloat("volume_${reminder.id}",it).apply()},colors=SliderDefaults.colors(thumbColor=canonicalBlue,activeTrackColor=canonicalBlue))}
+                Icon(Icons.Filled.ChevronRight,contentDescription=null,tint=canonicalDarkBlue)
+            }
+            HorizontalDivider(color=Color(0xFFE7EAF0))
+            EditorLine(Icons.Outlined.NoteAlt,"Заметка",prefs.getString("note_${reminder.id}","").orEmpty().ifBlank{"(необязательно)"},onEditNote)
             Spacer(Modifier.weight(1f))
-            Button(onClick=onBack,modifier=Modifier.fillMaxWidth().height(54.dp)){Text("Сохранить")}
-            Button(onClick={confirmDelete=true},modifier=Modifier.fillMaxWidth().height(54.dp),colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.errorContainer,contentColor=MaterialTheme.colorScheme.error)){Text("🗑  Удалить напоминание")}
+            Button(onClick=onBack,modifier=Modifier.fillMaxWidth().height(54.dp),colors=ButtonDefaults.buttonColors(containerColor=canonicalBlue),shape=RoundedCornerShape(8.dp)){Text("Сохранить")}
+            Button(onClick={confirmDelete=true},modifier=Modifier.fillMaxWidth().height(54.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFFFFECEC),contentColor=canonicalRed),shape=RoundedCornerShape(8.dp)){
+                Icon(Icons.Outlined.Delete,contentDescription=null,modifier=Modifier.size(28.dp));Spacer(Modifier.width(8.dp));Text("Удалить напоминание")
+            }
         }
     }
 
     @Composable
     private fun TextEditScreen(title:String,initial:String,onBack:()->Unit,onSave:(String)->Unit) {
         var value by remember { mutableStateOf(initial) }
-        Column(Modifier.fillMaxSize().padding(18.dp)) {
-            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick=onBack){Text("←",style=MaterialTheme.typography.headlineSmall)};Text(title,style=MaterialTheme.typography.titleLarge)}
-            OutlinedTextField(value=value,onValueChange={value=it},modifier=Modifier.fillMaxWidth(),minLines=3)
-            Spacer(Modifier.weight(1f))
-            Button(onClick={onSave(value.trim())},enabled=value.isNotBlank(),modifier=Modifier.fillMaxWidth().height(54.dp)){Text("Сохранить")}
+        Column(Modifier.fillMaxSize().padding(18.dp).imePadding()) {
+            Row(verticalAlignment=Alignment.CenterVertically){BackButton(onBack);Spacer(Modifier.width(12.dp));Text(title,style=MaterialTheme.typography.titleLarge,color=canonicalDarkBlue)}
+            Spacer(Modifier.height(14.dp))
+            OutlinedTextField(value=value,onValueChange={value=it},modifier=Modifier.fillMaxWidth(),minLines=3,shape=RoundedCornerShape(8.dp),colors=OutlinedTextFieldDefaults.colors(focusedBorderColor=canonicalBlue))
+            Spacer(Modifier.height(10.dp))
+            Button(onClick={onSave(value.trim())},enabled=value.isNotBlank(),modifier=Modifier.fillMaxWidth().height(52.dp),colors=ButtonDefaults.buttonColors(containerColor=canonicalBlue)){Text("Сохранить")}
         }
     }
 
-    @Composable private fun EditorLine(icon:String,title:String,value:String,onClick:()->Unit) {
-        Row(Modifier.fillMaxWidth().pointerInput(title){detectTapGestures(onTap={onClick()})}.padding(vertical=9.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
-            Text(icon,style=MaterialTheme.typography.titleLarge);Spacer(Modifier.width(12.dp));Column(Modifier.weight(1f)){Text(title);Text(value,color=MaterialTheme.colorScheme.onSurfaceVariant)};Text("›")
-        };HorizontalDivider()
+    @Composable
+    private fun EditorLine(icon:ImageVector,title:String,value:String,onClick:()->Unit) {
+        Row(Modifier.fillMaxWidth().pointerInput(title){detectTapGestures(onTap={onClick()})}.padding(vertical=9.dp),verticalAlignment=Alignment.CenterVertically){
+            Icon(icon,contentDescription=null,tint=canonicalDarkBlue,modifier=Modifier.size(30.dp));Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)){Text(title,color=canonicalDarkBlue);Text(value,color=Color(0xFF59618F))}
+            Icon(Icons.Filled.ChevronRight,contentDescription=null,tint=canonicalDarkBlue)
+        }
+        HorizontalDivider(color=Color(0xFFE7EAF0))
     }
 
     @Composable
