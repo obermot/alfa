@@ -24,6 +24,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
@@ -90,6 +92,9 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         var selected by remember { mutableStateOf<ReminderEntity?>(null) }
         var section by remember { mutableStateOf("reminders") }
         var scheduleFor by remember { mutableStateOf<ReminderEntity?>(null) }
+        BackHandler(enabled = scheduleFor != null || selected != null || section != "reminders") {
+            when { scheduleFor != null -> scheduleFor = null; selected != null -> selected = null; else -> section = "reminders" }
+        }
 
         MaterialTheme {
             Surface(Modifier.fillMaxSize()) {
@@ -134,7 +139,7 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         section: String, onSection: (String) -> Unit
     ) {
         Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp)) {
-            Text("🌼  Незабудка", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+            Text("✿  Незабудка", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF006BFF))
             Text("Ваши напоминания", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(18.dp))
             Text(if (userName.isBlank()) "Что вам напомнить?" else "$userName,\nчто вам напомнить?", style = MaterialTheme.typography.headlineSmall)
@@ -172,8 +177,8 @@ class MainActivity : ComponentActivity(), RecognitionListener {
                 Text(r.text, style=MaterialTheme.typography.titleMedium)
                 Text(format(r.dueAt), style=MaterialTheme.typography.bodySmall)
             }
-            Switch(checked=r.active,onCheckedChange={toggleReminder(r,it)})
-            TextButton(onClick={deleteReminder(r)}){Text("🗑")}
+            Switch(checked=r.active,onCheckedChange={setReminderEnabled(r,it)})
+            TextButton(onClick={deleteReminder(r)}){Text("▥", color=Color.Red)}
         }
         HorizontalDivider()
     }
@@ -290,12 +295,18 @@ class MainActivity : ComponentActivity(), RecognitionListener {
         }
     }
 
-    private fun toggleReminder(r:ReminderEntity,active:Boolean) {
+    private fun setReminderEnabled(r:ReminderEntity,active:Boolean) {
         Thread {
             val dao=AlphaDatabase.get(this).reminders()
-            val updated=r.copy(active=active)
+            val now=System.currentTimeMillis()
+            var due=r.dueAt
+            if(active && due <= now && r.recurrenceMinutes != null) {
+                val step=r.recurrenceMinutes*60_000L
+                while(due<=now) due+=step
+            }
+            val updated=r.copy(active=active,dueAt=due,lastFiredAt=null,acknowledged=false)
             dao.update(updated)
-            if(active) ReminderScheduler.schedule(this,updated) else ReminderScheduler.cancel(this,r.id)
+            if(active && due>now) ReminderScheduler.schedule(this,updated) else ReminderScheduler.cancel(this,r.id)
             runOnUiThread{refresh()}
         }.start()
     }
