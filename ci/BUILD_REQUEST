@@ -1,3 +1,3 @@
-control-build-2026-09-20
-Nezabudka alpha 0.2.5 per-reminder controls
-Reason: verify Room 1-to-2 migration, per-reminder repeat controls, bare duration parsing, tap-outside name focus, durable alarm access, visible ACK feedback, and persistent signing.
+control-build-2026-09-21-ui-1
+Nezabudka alpha 0.2.6 canonical UI integration
+Reason: compile and package first canonical UI shell over tested 0.2.5 reminder core.

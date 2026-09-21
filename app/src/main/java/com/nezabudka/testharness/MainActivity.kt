@@ -87,192 +87,247 @@ class MainActivity : ComponentActivity(), RecognitionListener {
     @Composable
     private fun App() {
         var text by remember { mutableStateOf("") }
-        var editableName by remember { mutableStateOf(userName) }
-        var nameFocused by remember { mutableStateOf(false) }
+        var selected by remember { mutableStateOf<ReminderEntity?>(null) }
+        var section by remember { mutableStateOf("reminders") }
         var repeatTarget by remember { mutableStateOf<ReminderEntity?>(null) }
         var tempHours by remember { mutableIntStateOf(0) }
         var tempMinutes by remember { mutableIntStateOf(0) }
-        val focusManager = LocalFocusManager.current
-
-        LaunchedEffect(userName) {
-            if (!nameFocused) editableName = userName
-        }
 
         val target = repeatTarget
         if (target != null) {
             AlertDialog(
                 onDismissRequest = { repeatTarget = null },
-                title = { Text("Повтор этого напоминания") },
+                title = { Text("Напомнить снова") },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("0 ч 0 мин — не повторять")
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Выберите время")
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                             Column {
                                 Text("Часы")
-                                AndroidView(
-                                    factory = { context ->
-                                        NumberPicker(context).apply {
-                                            minValue = 0
-                                            maxValue = 999
-                                            wrapSelectorWheel = true
-                                            value = tempHours
-                                            setOnValueChangedListener { _, _, v -> tempHours = v }
-                                        }
-                                    },
-                                    update = { if (it.value != tempHours) it.value = tempHours }
-                                )
+                                AndroidView(factory = { context ->
+                                    NumberPicker(context).apply {
+                                        minValue = 0
+                                        maxValue = 23
+                                        value = tempHours
+                                        setOnValueChangedListener { _, _, v -> tempHours = v }
+                                    }
+                                }, update = { if (it.value != tempHours) it.value = tempHours })
                             }
                             Column {
                                 Text("Минуты")
-                                AndroidView(
-                                    factory = { context ->
-                                        NumberPicker(context).apply {
-                                            minValue = 0
-                                            maxValue = 59
-                                            wrapSelectorWheel = true
-                                            value = tempMinutes
-                                            setOnValueChangedListener { _, _, v -> tempMinutes = v }
-                                        }
-                                    },
-                                    update = { if (it.value != tempMinutes) it.value = tempMinutes }
-                                )
+                                AndroidView(factory = { context ->
+                                    NumberPicker(context).apply {
+                                        minValue = 0
+                                        maxValue = 59
+                                        value = tempMinutes
+                                        setOnValueChangedListener { _, _, v -> tempMinutes = v }
+                                    }
+                                }, update = { if (it.value != tempMinutes) it.value = tempMinutes })
                             }
                         }
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = {
-                        val total = tempHours * 60 + tempMinutes
-                        updateRepeatInterval(target, total)
+                    Button(onClick = {
+                        updateRepeatInterval(target, tempHours * 60 + tempMinutes)
                         repeatTarget = null
-                    }) { Text("Сохранить") }
+                    }) { Text("Готово") }
                 },
-                dismissButton = {
-                    TextButton(onClick = { repeatTarget = null }) { Text("Отмена") }
-                }
+                dismissButton = { TextButton(onClick = { repeatTarget = null }) { Text("Отмена") } }
             )
         }
 
         MaterialTheme {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-                    .pointerInput(Unit) {
-                        detectTapGestures(onTap = { focusManager.clearFocus(force = true) })
-                    },
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("Незабудка", style = MaterialTheme.typography.headlineMedium)
-                if (status.isNotBlank()) Text(status)
-
-                if (userName.isNotBlank()) {
-                    OutlinedTextField(
-                        value = editableName,
-                        onValueChange = { editableName = it },
-                        label = { Text("Имя") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onFocusChanged { state ->
-                                val wasFocused = nameFocused
-                                nameFocused = state.isFocused
-                                if (wasFocused && !state.isFocused) editableName = userName
-                            },
-                        singleLine = true
-                    )
-                    Button(
-                        onClick = {
-                            if (editableName.isNotBlank()) {
-                                saveName(editableName)
-                                focusManager.clearFocus(force = true)
-                                nameFocused = false
-                            }
+            Surface(Modifier.fillMaxSize()) {
+                when {
+                    selected != null -> ReminderEditor(
+                        reminder = selected!!,
+                        onBack = { selected = null },
+                        onRepeat = {
+                            tempHours = selected!!.repeatIntervalMinutes / 60
+                            tempMinutes = selected!!.repeatIntervalMinutes % 60
+                            repeatTarget = selected
                         },
-                        enabled = nameFocused && editableName.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Изменить имя") }
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (!modelReady) {
-                        Button(onClick = { ensureModel() }) { Text("Установить русский язык") }
-                    }
-                    Button(onClick = { if (listening) stopListen(clearStatus = true) else startListen() }) {
-                        Text(if (listening) "Стоп" else "Говорить")
-                    }
-                }
-
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    label = {
-                        Text(
-                            when {
-                                userName.isBlank() -> "Как к вам обращаться?"
-                                pendingDate != null -> "Ответьте на уточнение"
-                                pendingDeleteAll -> "Подтвердите удаление"
-                                else -> "Напишите команду или напоминание"
-                            }
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Button(
-                    onClick = {
-                        if (text.isNotBlank()) {
-                            val accepted = handle(text, fromVoice = false)
-                            if (accepted) text = ""
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        when {
-                            userName.isBlank() -> "Сохранить имя"
-                            pendingDate != null || pendingDeleteAll -> "Ответить"
-                            else -> "Выполнить"
+                        onDelete = {
+                            cancelReminder(selected!!, "Напоминание удалено")
+                            selected = null
                         }
                     )
+                    section == "history" -> SimpleSection(
+                        title = "История напоминаний",
+                        body = "История будет показывать фактические события приложения.",
+                        section = section,
+                        onSection = { section = it }
+                    )
+                    section == "settings" -> SimpleSection(
+                        title = "Настройки",
+                        body = if (userName.isBlank()) "Имя пользователя ещё не задано" else "Имя: $userName",
+                        section = section,
+                        onSection = { section = it }
+                    )
+                    else -> HomeScreen(
+                        text = text,
+                        onText = { text = it },
+                        onSend = {
+                            if (text.isNotBlank() && handle(text, fromVoice = false)) text = ""
+                        },
+                        onMic = { if (listening) stopListen(clearStatus = true) else startListen() },
+                        onReminder = { selected = it },
+                        section = section,
+                        onSection = { section = it }
+                    )
                 }
+            }
+        }
+    }
 
-                Text("Активные напоминания", style = MaterialTheme.typography.titleMedium)
-                if (reminders.isEmpty()) {
-                    Text("Нет активных напоминаний")
-                } else {
-                    LazyColumn(Modifier.weight(1f)) {
-                        items(reminders, key = { it.id }) { r ->
-                            Card(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-                                Column(Modifier.padding(10.dp)) {
-                                    Text(r.text)
-                                    Text(format(r.dueAt))
-                                    if (r.lastFiredAt != null) {
-                                        Text("Ожидает подтверждения", style = MaterialTheme.typography.bodySmall)
-                                    }
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        TextButton(onClick = {
-                                            tempHours = r.repeatIntervalMinutes / 60
-                                            tempMinutes = r.repeatIntervalMinutes % 60
-                                            repeatTarget = r
-                                        }) {
-                                            Text(ReminderRepeatSettings.compactLabel(r.repeatIntervalMinutes))
-                                        }
-                                        TextButton(onClick = { cancelReminder(r, "Напоминание отменено") }) {
-                                            Text("Отменить")
-                                        }
-                                        if (r.lastFiredAt != null) {
-                                            TextButton(onClick = { openAlarm(r) }) { Text("Открыть") }
-                                        }
-                                    }
+    @Composable
+    private fun HomeScreen(
+        text: String,
+        onText: (String) -> Unit,
+        onSend: () -> Unit,
+        onMic: () -> Unit,
+        onReminder: (ReminderEntity) -> Unit,
+        section: String,
+        onSection: (String) -> Unit
+    ) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 14.dp)) {
+            Text("✿  Незабудка", style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.height(20.dp))
+            Text(
+                if (userName.isBlank()) "Что вам напомнить?" else "$userName,\\nЧТО ВАМ НАПОМНИТЬ?",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(Modifier.height(14.dp))
+            Button(onClick = onMic, modifier = Modifier.fillMaxWidth()) {
+                Text(if (listening) "■  Слушаю…" else "●  Нажмите и скажите")
+            }
+            if (status.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(status, style = MaterialTheme.typography.bodySmall)
+            }
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = text,
+                onValueChange = onText,
+                placeholder = { Text("Написать напоминание…") },
+                trailingIcon = { if (text.isNotBlank()) TextButton(onClick = onSend) { Text("➜") } },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(18.dp))
+            Text("Ближайшие напоминания", style = MaterialTheme.typography.titleMedium)
+            if (reminders.isEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text("Нет ближайших напоминаний", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.weight(1f))
+            } else {
+                LazyColumn(Modifier.weight(1f)) {
+                    items(reminders, key = { it.id }) { r ->
+                        Card(
+                            onClick = { onReminder(r) },
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        ) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text(r.text, style = MaterialTheme.typography.titleSmall)
+                                Text(format(r.dueAt), style = MaterialTheme.typography.bodySmall)
+                                if (r.lastFiredAt != null) {
+                                    Text("Ожидает подтверждения", style = MaterialTheme.typography.bodySmall)
+                                    TextButton(onClick = { openAlarm(r) }) { Text("Открыть") }
                                 }
                             }
                         }
                     }
                 }
             }
+            BottomNav(section, onSection)
+        }
+    }
+
+    @Composable
+    private fun ReminderEditor(
+        reminder: ReminderEntity,
+        onBack: () -> Unit,
+        onRepeat: () -> Unit,
+        onDelete: () -> Unit
+    ) {
+        var confirmDelete by remember { mutableStateOf(false) }
+        if (confirmDelete) {
+            AlertDialog(
+                onDismissRequest = { confirmDelete = false },
+                title = { Text("Удалить это напоминание?") },
+                text = { Text("Оно больше не будет появляться.") },
+                confirmButton = { Button(onClick = onDelete) { Text("Удалить") } },
+                dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Отмена") } }
+            )
+        }
+        Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            TextButton(onClick = onBack) { Text("‹  Назад") }
+            Text(reminder.text, style = MaterialTheme.typography.headlineSmall)
+            HorizontalDivider()
+            Text("Что напомнить?")
+            Text(reminder.text)
+            HorizontalDivider()
+            Text("Когда напомнить?")
+            Text(format(reminder.dueAt))
+            HorizontalDivider()
+            TextButton(onClick = onRepeat, modifier = Modifier.fillMaxWidth()) {
+                Text("Повторять напоминание?   " + ReminderRepeatSettings.compactLabel(reminder.repeatIntervalMinutes))
+            }
+            HorizontalDivider()
+            Text("Громкость")
+            Slider(value = 1f, onValueChange = { })
+            OutlinedTextField(
+                value = "",
+                onValueChange = {},
+                label = { Text("Заметка (необязательно)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.weight(1f))
+            Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Сохранить") }
+            TextButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Удалить напоминание")
+            }
+        }
+    }
+
+    @Composable
+    private fun SimpleSection(
+        title: String,
+        body: String,
+        section: String,
+        onSection: (String) -> Unit
+    ) {
+        Column(Modifier.fillMaxSize().padding(18.dp)) {
+            Text(title, style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.height(18.dp))
+            Text(body)
+            Spacer(Modifier.weight(1f))
+            BottomNav(section, onSection)
+        }
+    }
+
+    @Composable
+    private fun BottomNav(section: String, onSection: (String) -> Unit) {
+        NavigationBar {
+            NavigationBarItem(
+                selected = section == "reminders",
+                onClick = { onSection("reminders") },
+                icon = { Text("⌂") },
+                label = { Text("Напоминания") }
+            )
+            NavigationBarItem(
+                selected = section == "history",
+                onClick = { onSection("history") },
+                icon = { Text("◷") },
+                label = { Text("История") }
+            )
+            NavigationBarItem(
+                selected = section == "settings",
+                onClick = { onSection("settings") },
+                icon = { Text("⚙") },
+                label = { Text("Настройки") }
+            )
         }
     }
 
