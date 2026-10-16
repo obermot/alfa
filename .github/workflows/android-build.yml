@@ -35,6 +35,15 @@ jobs:
         with:
           gradle-version: '8.13'
 
+      - name: Download official DINish fonts for test build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets/fonts
+          curl -fL https://raw.githubusercontent.com/playbeing/dinish/main/fonts/ttf/DINish/DINish-Regular.ttf -o app/src/main/assets/fonts/DINish-Regular.ttf
+          curl -fL https://raw.githubusercontent.com/playbeing/dinish/main/fonts/ttf/DINish/DINish-SemiBold.ttf -o app/src/main/assets/fonts/DINish-SemiBold.ttf
+          curl -fL https://raw.githubusercontent.com/playbeing/dinish/main/fonts/ttf/DINish/DINish-Bold.ttf -o app/src/main/assets/fonts/DINish-Bold.ttf
+
       - name: Restore signing keystore
         shell: bash
         env:

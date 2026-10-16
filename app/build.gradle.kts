@@ -10,11 +10,11 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.nezabudka.alpha.clean013"
+        applicationId = "com.nezabudka.dinishfonttest"
         minSdk = 26
         targetSdk = 36
-        versionCode = 121
-        versionName = "0.3.1-canonical-mockup-v2"
+        versionCode = 1
+        versionName = "1.0-dinish-font-test"
     }
 
     val signingStorePath = System.getenv("NEZABUDKA_SIGNING_STORE_PATH")
