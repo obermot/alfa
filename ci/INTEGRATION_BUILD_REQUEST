@@ -1,6 +1,6 @@
 source=obermot/Nezabudka
 ref=assistant/remaining-integration-20261103
-requested=2026-11-03
+requested=2026-11-04
 purpose=integration-jvm-tests-and-debug-apk
 
-retry=2026-11-03-after-source-token-added
+retry=2026-11-04-after-android-sdk-setup-removal
