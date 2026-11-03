@@ -6,3 +6,5 @@ purpose=integration-jvm-tests-and-debug-apk
 retry=2026-11-04-after-android-sdk-setup-removal
 
 retry=2026-11-04-fresh-temporary-debug-signing-key
+
+retry=2026-11-04-remove-existing-debug-keystore-before-generation
