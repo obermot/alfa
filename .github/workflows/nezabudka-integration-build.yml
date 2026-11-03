@@ -39,15 +39,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Restore debug signing key outside Git history
+      - name: Generate temporary debug signing key
         shell: bash
-        env:
-          NEZABUDKA_KEYSTORE_B64: ${{ secrets.NEZABUDKA_KEYSTORE_B64 }}
         run: |
           set -euo pipefail
-          test -n "$NEZABUDKA_KEYSTORE_B64" || { echo "Missing NEZABUDKA_KEYSTORE_B64 secret"; exit 2; }
-          printf '%s' "$NEZABUDKA_KEYSTORE_B64" | base64 --decode > app/alpha-debug.keystore
-          chmod 600 app/alpha-debug.keystore
+          keytool -genkeypair -v -keystore app/alpha-debug.keystore \
+            -storepass android -keypass android -alias AndroidDebugKey \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -keyalg RSA -keysize 2048 -validity 10000 -noprompt
       - name: Run full JVM test suite and assemble integration APK
         run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
