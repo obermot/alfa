@@ -1,30 +1,44 @@
-name: Android debug build
+name: Nezabudka public mirror control build
 
 on:
   workflow_dispatch:
+  repository_dispatch:
+    types: [nezabudka_mirror]
   push:
-    branches: [main]
-    paths:
-      - 'ci/BUILD_REQUEST'
-  pull_request:
     branches: [main]
     paths:
       - 'ci/BUILD_REQUEST'
 
 concurrency:
-  group: alfa-android-build
+  group: alfa-nezabudka-control-build
   cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+
+      - name: Verify mirror provenance
+        if: github.event_name == 'repository_dispatch'
+        shell: bash
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.client_payload.source_sha }}
+        run: |
+          set -euo pipefail
+          test -f PUBLIC_MIRROR_PROVENANCE.txt
+          ACTUAL_SOURCE_SHA="$(sed -n 's/^source_sha=//p' PUBLIC_MIRROR_PROVENANCE.txt)"
+          test -n "$EXPECTED_SOURCE_SHA"
+          test "$ACTUAL_SOURCE_SHA" = "$EXPECTED_SOURCE_SHA" || {
+            echo "Mirror/source SHA mismatch: expected $EXPECTED_SOURCE_SHA, got $ACTUAL_SOURCE_SHA" >&2
+            exit 4
+          }
+          echo "Building canonical Nezabudka snapshot $ACTUAL_SOURCE_SHA"
 
       - uses: actions/setup-java@v4
         with:
@@ -35,27 +49,22 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Restore signing keystore
+      - name: Restore debug signing keystore outside Git history
         shell: bash
         env:
           NEZABUDKA_KEYSTORE_B64: ${{ secrets.NEZABUDKA_KEYSTORE_B64 }}
         run: |
           set -euo pipefail
           test -n "$NEZABUDKA_KEYSTORE_B64"
-          printf '%s' "$NEZABUDKA_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/nezabudka-signing.jks"
-          chmod 600 "$RUNNER_TEMP/nezabudka-signing.jks"
+          printf '%s' "$NEZABUDKA_KEYSTORE_B64" | base64 --decode > app/alpha-debug.keystore
+          chmod 600 app/alpha-debug.keystore
 
-      - name: Build signed debug APK
-        env:
-          NEZABUDKA_SIGNING_STORE_PATH: ${{ runner.temp }}/nezabudka-signing.jks
-          NEZABUDKA_KEYSTORE_PASSWORD: ${{ secrets.NEZABUDKA_KEYSTORE_PASSWORD }}
-          NEZABUDKA_KEY_ALIAS: ${{ secrets.NEZABUDKA_KEY_ALIAS }}
-          NEZABUDKA_KEY_PASSWORD: ${{ secrets.NEZABUDKA_KEY_PASSWORD }}
-        run: gradle :app:assembleDebug --stacktrace
+      - name: Run unit tests and build debug APK
+        run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
-          name: android-debug-apk
+          name: nezabudka-public-mirror-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 3
