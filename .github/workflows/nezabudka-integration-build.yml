@@ -43,6 +43,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -f app/alpha-debug.keystore
           keytool -genkeypair -v -keystore app/alpha-debug.keystore \
             -storepass android -keypass android -alias AndroidDebugKey \
             -dname "CN=Android Debug,O=Android,C=US" \
