@@ -1,0 +1,58 @@
+name: Nezabudka integration build from private source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ci/INTEGRATION_BUILD_REQUEST'
+  workflow_dispatch:
+
+concurrency:
+  group: nezabudka-integration-private-source
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact private integration source
+        uses: actions/checkout@v4
+        with:
+          repository: obermot/Nezabudka
+          ref: assistant/remaining-integration-20261103
+          token: ${{ secrets.NEZABUDKA_SOURCE_TOKEN }}
+          persist-credentials: false
+      - name: Confirm integration branch and source revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = "assistant/remaining-integration-20261103"
+          git rev-parse HEAD
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Restore debug signing key outside Git history
+        shell: bash
+        env:
+          NEZABUDKA_KEYSTORE_B64: ${{ secrets.NEZABUDKA_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$NEZABUDKA_KEYSTORE_B64" || { echo "Missing NEZABUDKA_KEYSTORE_B64 secret"; exit 2; }
+          printf '%s' "$NEZABUDKA_KEYSTORE_B64" | base64 --decode > app/alpha-debug.keystore
+          chmod 600 app/alpha-debug.keystore
+      - name: Run full JVM test suite and assemble integration APK
+        run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nezabudka-integration-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 3
