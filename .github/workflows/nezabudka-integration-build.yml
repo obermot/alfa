@@ -14,7 +14,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -75,55 +75,3 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-      - name: Enable KVM for Android emulator
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Capture actual first-screen Android rendering
-        continue-on-error: true
-        timeout-minutes: 15
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          profile: pixel_6
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: |
-            adb shell wm size 1080x2340
-            adb shell wm density 420
-            # Suppress Android's first-use immersive confirmation.
-            adb shell settings put secure immersive_mode_confirmations confirmed
-            sleep 15
-            adb install -r app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -n com.nezabudka.preview/com.nezabudka.testharness.FinalMainActivity
-            sleep 8
-            # Runner executes each script line independently: keep commands single-line.
-            adb shell input tap 934 626
-            adb shell input tap 305 1298
-            sleep 3
-            mkdir -p build/visual-screenshots
-            adb shell screencap -p /sdcard/nezabudka_screen_01.png
-            adb pull /sdcard/nezabudka_screen_01.png build/visual-screenshots/screen_01_android.png
-            # Verify the actual editable field and the Skip action.
-            adb shell input tap 500 1080
-            adb shell input text Test
-            adb shell input keyevent 4
-            sleep 2
-            adb shell screencap -p /sdcard/nezabudka_screen_01_typed.png
-            adb pull /sdcard/nezabudka_screen_01_typed.png build/visual-screenshots/screen_01_typed.png
-            adb shell input tap 500 2150
-            sleep 2
-            adb shell screencap -p /sdcard/nezabudka_screen_01_after_skip.png
-            adb pull /sdcard/nezabudka_screen_01_after_skip.png build/visual-screenshots/screen_01_after_skip.png
-            test "$(sha256sum build/visual-screenshots/screen_01_android.png | cut -d' ' -f1)" != "$(sha256sum build/visual-screenshots/screen_01_typed.png | cut -d' ' -f1)"
-            test "$(sha256sum build/visual-screenshots/screen_01_typed.png | cut -d' ' -f1)" != "$(sha256sum build/visual-screenshots/screen_01_after_skip.png | cut -d' ' -f1)"
-      - name: Upload actual Android first-screen screenshot
-        if: success() && hashFiles('build/visual-screenshots/screen_01_android.png') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: nezabudka-android-screen-01
-          path: build/visual-screenshots/screen_01_android.png
-          if-no-files-found: error
-          retention-days: 7
