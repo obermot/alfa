@@ -53,3 +53,4 @@ verify=2026-11-04-compact-swipe-3fde7afd-rebuild
 verify=2026-11-04-timeout-fix-47954168
 verify=2026-11-04-fast-apk-bdf7d3e8
 verify=2026-11-04-microphone-permission-green-e0244428
+verify=2026-11-04-delete-icon-label-fix
