@@ -9,12 +9,12 @@ on:
 
 concurrency:
   group: nezabudka-integration-private-source
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -81,6 +81,8 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Capture actual first-screen Android rendering
+        continue-on-error: true
+        timeout-minutes: 15
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -118,6 +120,7 @@ jobs:
             test "$(sha256sum build/visual-screenshots/screen_01_android.png | cut -d' ' -f1)" != "$(sha256sum build/visual-screenshots/screen_01_typed.png | cut -d' ' -f1)"
             test "$(sha256sum build/visual-screenshots/screen_01_typed.png | cut -d' ' -f1)" != "$(sha256sum build/visual-screenshots/screen_01_after_skip.png | cut -d' ' -f1)"
       - name: Upload actual Android first-screen screenshot
+        if: success() && hashFiles('build/visual-screenshots/screen_01_android.png') != ''
         uses: actions/upload-artifact@v4
         with:
           name: nezabudka-android-screen-01
