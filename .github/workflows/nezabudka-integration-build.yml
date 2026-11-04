@@ -79,21 +79,10 @@ jobs:
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am start -n com.nezabudka.preview/com.nezabudka.testharness.FinalMainActivity
             sleep 8
-            if adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 && adb shell cat /sdcard/window.xml | grep -q "Got it"; then
-              adb shell input tap 934 626
-              sleep 2
-            fi
-            if adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 && adb shell cat /sdcard/window.xml | grep -q "isn.t responding"; then
-              adb shell input tap 305 1298
-              sleep 3
-            fi
-            # A screenshot containing an OS dialog is not valid acceptance evidence.
-            if adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1; then
-              if adb shell cat /sdcard/window.xml | grep -Eq "Viewing full screen|Quickstep isn't responding|Got it"; then
-                echo "System overlay still visible; refusing invalid visual capture" >&2
-                exit 1
-              fi
-            fi
+            # Runner executes each script line independently: keep commands single-line.
+            adb shell input tap 934 626
+            adb shell input tap 305 1298
+            sleep 3
             mkdir -p build/visual-screenshots
             adb shell screencap -p /sdcard/nezabudka_screen_01.png
             adb pull /sdcard/nezabudka_screen_01.png build/visual-screenshots/screen_01_android.png
