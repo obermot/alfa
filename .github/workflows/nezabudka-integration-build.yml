@@ -18,18 +18,38 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Check out CI request from triggering commit
+        uses: actions/checkout@v4
+        with:
+          path: ci-request
+          persist-credentials: false
+      - name: Validate and pin requested private source revision
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          request=ci-request/ci/INTEGRATION_BUILD_REQUEST
+          sha="$(sed -n 's/^source_sha=//p' "$request" | tail -n 1)"
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Set source_sha=<40-character commit SHA> in ci/INTEGRATION_BUILD_REQUEST"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Pinned private source SHA: $sha"
       - name: Check out exact private integration source
         uses: actions/checkout@v4
         with:
           repository: obermot/Nezabudka
-          ref: assistant/remaining-integration-20261103
+          ref: ${{ steps.source.outputs.sha }}
+          path: source
           token: ${{ secrets.NEZABUDKA_SOURCE_TOKEN }}
           persist-credentials: false
-      - name: Confirm integration branch and source revision
+      - name: Confirm exact source revision
         shell: bash
+        working-directory: source
         run: |
           set -euo pipefail
-          test "$(git branch --show-current)" = "assistant/remaining-integration-20261103"
+          test "$(git rev-parse HEAD)" = "${{ steps.source.outputs.sha }}"
           git rev-parse HEAD
       - uses: actions/setup-java@v4
         with:
@@ -41,24 +61,29 @@ jobs:
           gradle-version: '8.13'
       - name: Export original CorelDRAW page 1 as Android bitmap
         shell: bash
+        working-directory: source
+        timeout-minutes: 5
         env:
           SOURCE_TOKEN: ${{ secrets.NEZABUDKA_SOURCE_TOKEN }}
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq libreoffice-draw poppler-utils
+          timeout 150s sudo apt-get update -qq
+          timeout 150s sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libreoffice-draw poppler-utils
           mkdir -p /tmp/cdr-export
-          libreoffice -env:UserInstallation=file:///tmp/lo-nezabudka-visual --headless --convert-to pdf --outdir /tmp/cdr-export "Исходники/зкраны для программирования.cdr"
-          pdftoppm -f 1 -singlefile -scale-to-x 1080 -scale-to-y 2340 -png /tmp/cdr-export/*.pdf /tmp/cdr-export/nezabudka_screen01
+          timeout 90s libreoffice -env:UserInstallation=file:///tmp/lo-nezabudka-visual --headless --convert-to pdf --outdir /tmp/cdr-export "Исходники/зкраны для программирования.cdr"
+          test -s "/tmp/cdr-export/зкраны для программирования.pdf"
+          timeout 45s pdftoppm -f 1 -singlefile -scale-to-x 1080 -scale-to-y 2340 -png "/tmp/cdr-export/зкраны для программирования.pdf" /tmp/cdr-export/nezabudka_screen01
           mkdir -p app/src/main/assets
+          test -s /tmp/cdr-export/nezabudka_screen01.png
           cp /tmp/cdr-export/nezabudka_screen01.png app/src/main/assets/corel_screen01_original.png
       - name: Restore persistent development signing key
         uses: actions/cache@v4
         with:
-          path: app/alpha-debug.keystore
+          path: source/app/alpha-debug.keystore
           key: nezabudka-debug-signing-key-v1
       - name: Generate development signing key only on first build
         shell: bash
+        working-directory: source
         run: |
           set -euo pipefail
           if test -s app/alpha-debug.keystore; then echo 'Using persistent development signing key'; exit 0; fi
@@ -67,11 +92,12 @@ jobs:
             -dname "CN=Android Debug,O=Android,C=US" \
             -keyalg RSA -keysize 2048 -validity 10000 -noprompt
       - name: Run full JVM test suite and assemble integration APK
+        working-directory: source
         run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: nezabudka-integration-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: source/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 3
 
