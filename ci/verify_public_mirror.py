@@ -41,6 +41,14 @@ for line in lines[3:]:
     entries[rel]=digest
 if lines[2] != f'source_file_count={len(entries)}':
     sys.exit('PUBLIC MIRROR SAFETY FAILURE: incorrect file count')
+required={'settings.gradle.kts','app/build.gradle.kts','app/src/main/AndroidManifest.xml'}
+if not required.issubset(entries):
+    sys.exit('PUBLIC MIRROR SAFETY FAILURE: missing mandatory Android inputs')
+allowed_roots={'settings.gradle.kts','build.gradle.kts','gradle.properties','app/build.gradle.kts','app/proguard-rules.pro','app/src/main/AndroidManifest.xml'}
+allowed_prefixes=('app/src/main/java/','app/src/main/kotlin/','app/src/main/res/','app/src/main/assets/','app/src/main/fonts/','app/src/test/','app/src/androidTest/')
+for rel in entries:
+    if not (rel in allowed_roots or rel.startswith(allowed_prefixes)):
+        sys.exit('PUBLIC MIRROR SAFETY FAILURE: non-allowlisted source: '+rel)
 for rel,digest in entries.items():
     p=root/rel
     if not p.is_file() or hashlib.sha256(p.read_bytes()).hexdigest()!=digest:
