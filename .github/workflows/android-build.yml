@@ -24,6 +24,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Reject private source artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 ci/verify_public_mirror.py
+
       - name: Verify mirror provenance
         if: github.event_name == 'repository_dispatch'
         shell: bash
