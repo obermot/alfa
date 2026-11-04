@@ -52,11 +52,16 @@ jobs:
           pdftoppm -f 1 -singlefile -scale-to-x 1080 -scale-to-y 2340 -png /tmp/cdr-export/*.pdf /tmp/cdr-export/nezabudka_screen01
           mkdir -p app/src/main/assets
           cp /tmp/cdr-export/nezabudka_screen01.png app/src/main/assets/corel_screen01_original.png
-      - name: Generate temporary debug signing key
+      - name: Restore persistent development signing key
+        uses: actions/cache@v4
+        with:
+          path: app/alpha-debug.keystore
+          key: nezabudka-debug-signing-key-v1
+      - name: Generate development signing key only on first build
         shell: bash
         run: |
           set -euo pipefail
-          rm -f app/alpha-debug.keystore
+          if test -s app/alpha-debug.keystore; then echo 'Using persistent development signing key'; exit 0; fi
           keytool -genkeypair -v -keystore app/alpha-debug.keystore \
             -storepass android -keypass android -alias AndroidDebugKey \
             -dname "CN=Android Debug,O=Android,C=US" \
