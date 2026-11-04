@@ -59,3 +59,4 @@ verify=2026-11-04-calendar-fit-all-actions
 verify=2026-11-04-calendar-summary-trash-original
 verify=2026-11-04-repeat-editor-visible-bottom-action
 verify=2026-11-04-compact-alarm-transparent-overlay-49b4ae3a
+verify=2026-11-04-full-alarm-overlay-and-editor-fit
