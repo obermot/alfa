@@ -32,7 +32,7 @@ if not re.fullmatch(r'source_sha=[0-9a-f]{40}',lines[1]):
     sys.exit('PUBLIC MIRROR SAFETY FAILURE: invalid source SHA')
 entries={}
 for line in lines[3:]:
-    match=re.fullmatch(r'([0-9a-f]{64})  ([^\\n]+)',line)
+    match=re.fullmatch(r'([0-9a-f]{64})  (.+)', line)
     if not match:
         sys.exit('PUBLIC MIRROR SAFETY FAILURE: invalid file digest entry')
     digest, rel=match.groups()
