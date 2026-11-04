@@ -74,7 +74,7 @@ jobs:
             adb shell wm size 1080x2340
             adb shell wm density 420
             adb install -r app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -n com.nezabudka.testharness/.FinalMainActivity
+            adb shell am start -n com.nezabudka.preview/com.nezabudka.testharness.FinalMainActivity
             sleep 12
             mkdir -p build/visual-screenshots
             adb shell screencap -p /sdcard/nezabudka_screen_01.png
