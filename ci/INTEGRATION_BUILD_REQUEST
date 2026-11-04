@@ -10,3 +10,4 @@ retry=2026-11-04-fresh-temporary-debug-signing-key
 retry=2026-11-04-remove-existing-debug-keystore-before-generation
 
 control-build-2026-11-04: authorized latest private integration branch, full JVM tests and APK.
+retry=2026-11-04-fix-IME-editor-contract-test-after-220-tests-one-failure
