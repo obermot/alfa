@@ -30,3 +30,4 @@ verify=2026-11-04-screen01-single-line-capture
 verify=2026-11-04-screen01-original-cdr-person-path
 verify=2026-11-04-screen01-original-cdr-bitmap-overlay
 verify=2026-11-04-screen01-cdr-asset-build-no-push
+verify=2026-11-04-screen01-direct-cdr-svg-export
