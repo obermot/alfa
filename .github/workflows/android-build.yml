@@ -31,7 +31,6 @@ jobs:
           python3 ci/verify_public_mirror.py
 
       - name: Verify mirror provenance
-        if: github.event_name == 'repository_dispatch'
         shell: bash
         env:
           EXPECTED_SOURCE_SHA: ${{ github.event.client_payload.source_sha }}
@@ -39,11 +38,11 @@ jobs:
           set -euo pipefail
           test -f PUBLIC_MIRROR_PROVENANCE.txt
           ACTUAL_SOURCE_SHA="$(sed -n 's/^source_sha=//p' PUBLIC_MIRROR_PROVENANCE.txt)"
-          test -n "$EXPECTED_SOURCE_SHA"
-          test "$ACTUAL_SOURCE_SHA" = "$EXPECTED_SOURCE_SHA" || {
+          [[ "$ACTUAL_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid or absent source SHA" >&2; exit 4; }
+          if [ -n "$EXPECTED_SOURCE_SHA" ] && [ "$ACTUAL_SOURCE_SHA" != "$EXPECTED_SOURCE_SHA" ]; then
             echo "Mirror/source SHA mismatch: expected $EXPECTED_SOURCE_SHA, got $ACTUAL_SOURCE_SHA" >&2
             exit 4
-          }
+          fi
           echo "Building canonical Nezabudka snapshot $ACTUAL_SOURCE_SHA"
 
       - uses: actions/setup-java@v4
