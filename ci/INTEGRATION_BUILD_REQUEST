@@ -33,3 +33,4 @@ verify=2026-11-04-screen01-cdr-asset-build-no-push
 verify=2026-11-04-screen01-direct-cdr-svg-export
 verify=2026-11-04-screen01-pdf-page1-interaction-test
 verify=2026-11-04-screen01-user-four-fixes-vector-native-fit
+verify=2026-11-04-screen01-pdf-reference-colors-backing-alignment-gutters
