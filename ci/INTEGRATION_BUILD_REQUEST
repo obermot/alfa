@@ -69,3 +69,4 @@ verify=2026-11-04-batch-onboarding-compact-ce7a1f3c-1e4cf54d
 verify=2026-11-05-original-corel-page1-and-alarm-reliability-cbdb63ed
 verify=2026-11-05-single-task-alarm-refresh-29999495
 verify=2026-11-05-alarm04-overlay-ui02-ui04-head-9a9a519c6ed4bba8f03162a2639cdfedc6e05b67
+retry=2026-11-05-compile-import-fix-61183ad8f07fd330f2909eb09a4bac13e9566add
