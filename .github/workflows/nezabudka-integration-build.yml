@@ -99,6 +99,19 @@ jobs:
             mkdir -p build/visual-screenshots
             adb shell screencap -p /sdcard/nezabudka_screen_01.png
             adb pull /sdcard/nezabudka_screen_01.png build/visual-screenshots/screen_01_android.png
+            # Verify the actual editable field and the Skip action.
+            adb shell input tap 500 1080
+            adb shell input text Test
+            adb shell input keyevent 4
+            sleep 2
+            adb shell screencap -p /sdcard/nezabudka_screen_01_typed.png
+            adb pull /sdcard/nezabudka_screen_01_typed.png build/visual-screenshots/screen_01_typed.png
+            adb shell input tap 500 2150
+            sleep 2
+            adb shell screencap -p /sdcard/nezabudka_screen_01_after_skip.png
+            adb pull /sdcard/nezabudka_screen_01_after_skip.png build/visual-screenshots/screen_01_after_skip.png
+            test "$(sha256sum build/visual-screenshots/screen_01_android.png | cut -d' ' -f1)" != "$(sha256sum build/visual-screenshots/screen_01_typed.png | cut -d' ' -f1)"
+            test "$(sha256sum build/visual-screenshots/screen_01_typed.png | cut -d' ' -f1)" != "$(sha256sum build/visual-screenshots/screen_01_after_skip.png | cut -d' ' -f1)"
       - name: Upload actual Android first-screen screenshot
         uses: actions/upload-artifact@v4
         with:
