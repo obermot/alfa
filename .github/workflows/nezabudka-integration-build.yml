@@ -46,11 +46,10 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libreoffice-draw poppler-utils
+          sudo apt-get install -y -qq libreoffice-draw inkscape
           mkdir -p /tmp/cdr-export
-          libreoffice -env:UserInstallation=file:///tmp/lo-nezabudka-visual --headless --convert-to pdf --outdir /tmp/cdr-export "Исходники/зкраны для программирования.cdr"
-          pdfinfo /tmp/cdr-export/*.pdf | grep Pages
-          pdftoppm -f 1 -singlefile -scale-to-x 1080 -scale-to-y 2340 -png /tmp/cdr-export/*.pdf /tmp/cdr-export/nezabudka_screen01
+          libreoffice -env:UserInstallation=file:///tmp/lo-nezabudka-visual --headless --convert-to svg --outdir /tmp/cdr-export "Исходники/зкраны для программирования.cdr"
+          inkscape /tmp/cdr-export/*.svg --export-filename=/tmp/cdr-export/nezabudka_screen01.png --export-width=1080 --export-height=2340
           mkdir -p app/src/main/assets
           cp /tmp/cdr-export/nezabudka_screen01.png app/src/main/assets/corel_screen01_original.png
       - name: Generate temporary debug signing key
