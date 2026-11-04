@@ -13,3 +13,4 @@ control-build-2026-11-04: authorized latest private integration branch, full JVM
 retry=2026-11-04-fix-IME-editor-contract-test-after-220-tests-one-failure
 retry=2026-11-04-cdr-page-6-heading-fix-920170fb
 verify=2026-11-04-cdr-settings-75-79-label-fixes-0c921842
+verify=2026-11-04-cdr-settings-test-3a0a41fd
