@@ -73,9 +73,20 @@ jobs:
           script: |
             adb shell wm size 1080x2340
             adb shell wm density 420
+            # Suppress Android's first-use immersive confirmation.
+            adb shell settings put secure immersive_mode_confirmations confirmed
+            sleep 15
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am start -n com.nezabudka.preview/com.nezabudka.testharness.FinalMainActivity
-            sleep 12
+            sleep 8
+            if adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 && adb shell cat /sdcard/window.xml | grep -q "Got it"; then
+              adb shell input tap 934 626
+              sleep 2
+            fi
+            if adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 && adb shell cat /sdcard/window.xml | grep -q "isn.t responding"; then
+              adb shell input tap 305 1298
+              sleep 3
+            fi
             mkdir -p build/visual-screenshots
             adb shell screencap -p /sdcard/nezabudka_screen_01.png
             adb pull /sdcard/nezabudka_screen_01.png build/visual-screenshots/screen_01_android.png
