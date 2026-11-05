@@ -71,6 +71,7 @@ verify=2026-11-05-single-task-alarm-refresh-29999495
 verify=2026-11-05-alarm04-overlay-ui02-ui04-head-9a9a519c6ed4bba8f03162a2639cdfedc6e05b67
 retry=2026-11-05-compile-import-fix-61183ad8f07fd330f2909eb09a4bac13e9566add
 
-source_sha=44c6590d949300acc4d63309510eb18dcc13c59f
+source_sha=38b5dd168f141f8f42c0497d2c695baec796e24c
 verify=2026-11-05-pinned-overlay-lifecycle-ci-timeout-fix
 verify=2026-11-05-no-cdr-conversion-native-onboarding-44c6590d
+verify=2026-11-05-editor-ime-and-current-alarm-contract-batch
