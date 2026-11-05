@@ -59,23 +59,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Export original CorelDRAW page 1 as Android bitmap
-        shell: bash
-        working-directory: source
-        timeout-minutes: 5
-        env:
-          SOURCE_TOKEN: ${{ secrets.NEZABUDKA_SOURCE_TOKEN }}
-        run: |
-          set -euo pipefail
-          timeout 150s sudo apt-get update -qq
-          timeout 150s sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libreoffice-draw poppler-utils
-          mkdir -p /tmp/cdr-export
-          timeout 90s libreoffice -env:UserInstallation=file:///tmp/lo-nezabudka-visual --headless --convert-to pdf --outdir /tmp/cdr-export "Исходники/зкраны для программирования.cdr"
-          test -s "/tmp/cdr-export/зкраны для программирования.pdf"
-          timeout 45s pdftoppm -f 1 -singlefile -scale-to-x 1080 -scale-to-y 2340 -png "/tmp/cdr-export/зкраны для программирования.pdf" /tmp/cdr-export/nezabudka_screen01
-          mkdir -p app/src/main/assets
-          test -s /tmp/cdr-export/nezabudka_screen01.png
-          cp /tmp/cdr-export/nezabudka_screen01.png app/src/main/assets/corel_screen01_original.png
       - name: Restore persistent development signing key
         uses: actions/cache@v4
         with:
