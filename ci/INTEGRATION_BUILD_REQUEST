@@ -71,7 +71,7 @@ verify=2026-11-05-single-task-alarm-refresh-29999495
 verify=2026-11-05-alarm04-overlay-ui02-ui04-head-9a9a519c6ed4bba8f03162a2639cdfedc6e05b67
 retry=2026-11-05-compile-import-fix-61183ad8f07fd330f2909eb09a4bac13e9566add
 
-source_sha=575260a5e96995829d52a1e0be1557793f184452
+source_sha=6e6e583e4139406fc9a4eef79e2332d9ea3571b5
 verify=2026-11-05-pinned-overlay-lifecycle-ci-timeout-fix
 verify=2026-11-05-no-cdr-conversion-native-onboarding-44c6590d
 verify=2026-11-05-editor-ime-and-current-alarm-contract-batch
@@ -81,3 +81,4 @@ verify=2026-11-05-build-current-source-apk-only
 verify=2026-11-06-7px-keyboard-gap-user-apk-request
 verify=2026-11-06-debug-apk-assemble-only-after-known-5-jvm-test-failures
 verify=2026-11-06-full-pdf-ui-patch-apk-575260a5
+retry=2026-11-06-fix-editor-viewport-width-compose-compile
