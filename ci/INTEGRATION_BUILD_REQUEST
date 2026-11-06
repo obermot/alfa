@@ -79,3 +79,4 @@ verify=2026-11-05-onboarding-ime-stable-artboard-one-batch
 
 verify=2026-11-05-build-current-source-apk-only
 verify=2026-11-06-7px-keyboard-gap-user-apk-request
+verify=2026-11-06-debug-apk-assemble-only-after-known-5-jvm-test-failures
