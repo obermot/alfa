@@ -44,6 +44,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Compile Kotlin only (no APK or packaging)
+      - name: Compile Kotlin and targeted unit regressions (no APK)
         working-directory: source
-        run: gradle :app:compileDebugKotlin --stacktrace
+        run: |
+          gradle :app:compileDebugKotlin :app:testDebugUnitTest --tests 'com.nezabudka.testharness.FinalPdfGeometryRegressionTest' --tests 'com.nezabudka.testharness.FinalUiRuntimeBridgeTest' --stacktrace
