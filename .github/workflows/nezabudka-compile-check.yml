@@ -1,0 +1,49 @@
+name: Nezabudka compile-only validation (no APK)
+on:
+  push:
+    branches: [main]
+    paths: ['ci/INTEGRATION_VALIDATE_REQUEST']
+concurrency:
+  group: nezabudka-source-validation
+  cancel-in-progress: false
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - name: Read pinned validation request
+        uses: actions/checkout@v4
+        with:
+          path: ci-request
+          persist-credentials: false
+      - name: Validate exact source SHA
+        id: pinned
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(sed -n 's/^source_sha=//p' ci-request/ci/INTEGRATION_VALIDATE_REQUEST | tail -n 1)"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Checkout exact Nezabudka source
+        uses: actions/checkout@v4
+        with:
+          repository: obermot/Nezabudka
+          ref: ${{ steps.pinned.outputs.sha }}
+          path: source
+          token: ${{ secrets.NEZABUDKA_SOURCE_TOKEN }}
+          persist-credentials: false
+      - name: Verify pinned HEAD
+        working-directory: source
+        run: test "$(git rev-parse HEAD)" = "${{ steps.pinned.outputs.sha }}"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Compile Kotlin only (no APK or packaging)
+        working-directory: source
+        run: gradle :app:compileDebugKotlin --stacktrace
