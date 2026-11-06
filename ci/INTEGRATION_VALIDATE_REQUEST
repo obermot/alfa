@@ -1,3 +1,4 @@
-source_sha=717e268646bb2494df9fffe2a37c45cc10286071
+source_sha=8ffc41172e333f6dcd4e5592c02a51c7ef1f1b51
 purpose=2026-11-06-talarm-port-compile-only-no-apk
 verify=2026-11-06-talarm-targeted-jvm-regression-no-apk
+verify=2026-11-06-talarm-jvm-after-stale-test-assertion-fix
