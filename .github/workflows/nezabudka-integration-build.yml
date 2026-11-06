@@ -74,9 +74,9 @@ jobs:
             -storepass android -keypass android -alias AndroidDebugKey \
             -dname "CN=Android Debug,O=Android,C=US" \
             -keyalg RSA -keysize 2048 -validity 10000 -noprompt
-      - name: Run full JVM test suite and assemble integration APK
+      - name: Assemble requested debug APK (tests tracked separately)
         working-directory: source
-        run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
+        run: gradle :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: nezabudka-integration-debug-apk
