@@ -1,0 +1,87 @@
+name: Nezabudka Android device regressions
+
+on:
+  push:
+    branches: [assistant/emulator-validation-20261107]
+    paths: ['.github/workflows/nezabudka-device-regressions.yml', 'ci/DEVICE_TEST_REQUEST']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: nezabudka-device-regressions
+  cancel-in-progress: true
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: control
+          persist-credentials: false
+      - name: Validate requested source SHA
+        id: request
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(sed -n 's/^source_sha=//p' control/ci/DEVICE_TEST_REQUEST)"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Check out exact private source without publishing it
+        uses: actions/checkout@v4
+        with:
+          repository: obermot/Nezabudka
+          ref: ${{ steps.request.outputs.sha }}
+          token: ${{ secrets.NEZABUDKA_SOURCE_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+      - name: Prepare disposable emulator signing key and KVM
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "${{ steps.request.outputs.sha }}"
+          rm -f source/app/alpha-debug.keystore
+          keytool -genkeypair -keystore source/app/alpha-debug.keystore -storepass android -keypass android -alias AndroidDebugKey -dname 'CN=Disposable Emulator Test' -keyalg RSA -keysize 2048 -validity 2
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          test -r /dev/kvm && test -w /dev/kvm
+          mkdir -p evidence
+          printf 'source_sha=%s\n' '${{ steps.request.outputs.sha }}' > evidence/provenance.txt
+      - name: Compile app and instrumentation before starting emulator
+        working-directory: source
+        run: gradle --no-daemon --max-workers=2 :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+      - name: Execute real Android UI regressions (API 35)
+        uses: ReactiveCircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808 # v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          cores: 2
+          ram-size: 2048M
+          heap-size: 512M
+          disk-size: 2048M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash control/ci/run-device-regressions.sh
+      - name: Preserve reports and screenshots only (no sources, APKs, keys or caches)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nezabudka-device-evidence-${{ steps.request.outputs.sha }}
+          path: |
+            evidence/
+            source/app/build/reports/androidTests/
+            source/app/build/outputs/androidTest-results/
+          if-no-files-found: warn
+          retention-days: 3
