@@ -61,6 +61,13 @@ jobs:
           test -r /dev/kvm && test -w /dev/kvm
           mkdir -p evidence
           printf 'source_sha=%s\n' '${{ steps.request.outputs.sha }}' > evidence/provenance.txt
+      - name: Fetch official Russian Vosk model for offline instrumentation only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source/app/src/androidTest/assets
+          curl --fail --location --retry 2 --connect-timeout 20 --max-time 180 https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip -o source/app/src/androidTest/assets/vosk-model-small-ru-0.22.zip
+          sha256sum source/app/src/androidTest/assets/vosk-model-small-ru-0.22.zip > evidence/test-model.sha256
       - name: Compile app and instrumentation before starting emulator
         working-directory: source
         run: gradle --no-daemon --max-workers=2 :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
