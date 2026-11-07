@@ -1,0 +1,43 @@
+name: Read existing device evidence
+on:
+  push:
+    branches: [assistant/emulator-validation-20261107]
+    paths: [.github/workflows/nezabudka-evidence-summary.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Summarize existing reports without compiling or running devices
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 42403633411 --repo obermot/alfa --dir reports
+          python3 - <<'PY_REPORT'
+          from pathlib import Path
+          import xml.etree.ElementTree as E
+          for p in Path('reports').rglob('lint-results-debug.xml'):
+              print('LINT REPORT',p)
+              root=E.parse(p).getroot()
+              for i in root.findall('issue'):
+                  if i.get('severity') in ('Error','Fatal'):
+                      print('LINT ERROR', i.attrib)
+                      for loc in i.findall('location'): print('LOCATION',loc.attrib)
+              break
+          PY_REPORT
+          gh api repos/obermot/alfa/actions/jobs/128493174145/logs > oldlogs
+          python3 - <<'PY_LOG'
+          import zipfile
+          from pathlib import Path
+          p=Path('oldlogs')
+          if zipfile.is_zipfile(p):
+              z=zipfile.ZipFile(p)
+              text='\n'.join(z.read(n).decode('utf-8','replace') for n in z.namelist())
+          else: text=p.read_text(errors='replace')
+          print('OLD LOG BYTES',p.stat().st_size)
+          for line in text.splitlines():
+              if any(x in line for x in ('<testsuite','<failure','APKCASE','tests completed','FAILED')): print(line[:2500])
+          PY_LOG
