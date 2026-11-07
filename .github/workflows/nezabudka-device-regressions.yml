@@ -59,7 +59,7 @@ jobs:
           printf 'source_sha=%s\n' '${{ steps.request.outputs.sha }}' > evidence/provenance.txt
       - name: Compile app and instrumentation before starting emulator
         working-directory: source
-        run: gradle --no-daemon --max-workers=2 :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+        run: gradle --no-daemon --max-workers=2 :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
       - name: Execute real Android UI regressions (API 35)
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, resolved commit
         with:
