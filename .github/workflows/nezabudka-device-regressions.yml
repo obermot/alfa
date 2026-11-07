@@ -61,7 +61,7 @@ jobs:
         working-directory: source
         run: gradle --no-daemon --max-workers=2 :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
       - name: Execute real Android UI regressions (API 35)
-        uses: ReactiveCircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808 # v2
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, resolved commit
         with:
           api-level: 35
           arch: x86_64

@@ -13,4 +13,13 @@ adb shell screencap -p /sdcard/device-final.png
 adb pull /sdcard/device-final.png evidence/ || true
 adb pull /sdcard/Android/data/com.nezabudka.preview/files/device-evidence evidence/ || true
 cat evidence/instrumentation.log
+python3 - <<'REPORTS'
+from pathlib import Path
+for p in Path('source/app/build/outputs/androidTest-results').rglob('*.xml'):
+    print('DEVICE TEST XML:',p)
+    print(p.read_text()[:40000])
+for p in Path('evidence').rglob('*.semantics.txt'):
+    print('DEVICE SEMANTICS:',p)
+    print(p.read_text()[:18000])
+REPORTS
 exit "$result"
