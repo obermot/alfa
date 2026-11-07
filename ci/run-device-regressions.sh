@@ -3,7 +3,7 @@ set -uo pipefail
 adb logcat -c
 # The grant is applied after install by the test runner where supported.
 cd source
-gradle --no-daemon --max-workers=2 :app:connectedDebugAndroidTest --stacktrace > ../evidence/instrumentation.log 2>&1
+gradle --no-daemon --max-workers=2 :app:connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true --stacktrace > ../evidence/instrumentation.log 2>&1
 result=$?
 cd ..
 adb logcat -d -v threadtime > evidence/logcat.txt
