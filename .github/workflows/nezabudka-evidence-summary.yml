@@ -28,7 +28,7 @@ jobs:
                       for loc in i.findall('location'): print('LOCATION',loc.attrib)
               break
           PY_REPORT
-          gh api repos/obermot/alfa/actions/jobs/128493174145/logs > oldlogs
+          gh api --allow-escape-sequences repos/obermot/alfa/actions/jobs/128493174145/logs > oldlogs
           python3 - <<'PY_LOG'
           import zipfile
           from pathlib import Path
