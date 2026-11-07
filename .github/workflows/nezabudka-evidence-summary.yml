@@ -11,24 +11,19 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Display selected synthetic screenshots from existing reports
+      - name: Inspect the captured Android16 system-launcher ANR without rerunning an APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh run download 42404787794 --repo obermot/alfa --pattern '*api-35-*' --dir reports
-          python3 -m pip install --quiet Pillow
+          gh run download 42409573186 --repo obermot/alfa --pattern '*api-36-*' --dir reports
           python3 - <<'PY_REPORT'
           from pathlib import Path
-          import base64,io
-          from PIL import Image
-          names={'original-apk-alarm-compact-full-close','compact-alarm'}
-          for p in Path('reports').rglob('original-apk-alarm-compact-full-close.xml'):
-              print('BASELINE UI XML',p.read_text()[:18000])
-          for p in Path('reports').rglob('*.png'):
-              if p.stem not in names: continue
-              pic=Image.open(p)
-              pic.thumbnail((540,1400))
-              out=io.BytesIO();pic.save(out,format='PNG')
-              data=base64.b64encode(out.getvalue()).decode()
-              for i in range(0,len(data),4096): print('DEVICE_PNG',p.name,i//4096,data[i:i+4096])
+          for p in Path('reports').rglob('logcat.txt'):
+              lines=p.read_text(errors='replace').splitlines()
+              indices=[i for i,l in enumerate(lines) if any(x in l for x in ('ANR in','am_anr','Input dispatching timed out','anr_2026'))]
+              print('SYSTEM ANR MATCHES',p,len(indices))
+              printed=set()
+              for i in indices:
+                  for j in range(max(0,i-4),min(len(lines),i+55)):
+                      if j not in printed: print(lines[j]);printed.add(j)
           PY_REPORT
