@@ -56,13 +56,14 @@ def fixture(alarm=False):
     now=int(time.time()*1000);due=now+12000
     import datetime
     day=(datetime.datetime.fromtimestamp(due/1000).date()-datetime.date(1970,1,1)).days
+    minute=datetime.datetime.fromtimestamp(due/1000).hour*60+datetime.datetime.fromtimestamp(due/1000).minute
     c=sqlite3.connect(p)
     for table in ('reminder_events','final_schedule_slots','final_reminders','final_memos'):c.execute('DELETE FROM '+table)
     c.execute('''INSERT INTO final_reminders(id,text,note,mode,state,epochDaysCsv,minutesOfDayCsv,excludedWeekdaysCsv,startEpochDay,createdAt,creationOrder)
-        VALUES(1,?,'',?,'ACTIVE',?,'857','',?,?,?)''',('APK ALARM' if alarm else 'APK TIME','ONE_SHOT' if alarm else 'DAILY',str(day) if alarm else '',None if alarm else day+1,now,now))
+        VALUES(1,?,'',?,'ACTIVE',?,?,'',?,?,?)''',('APK ALARM' if alarm else 'APK TIME','ONE_SHOT' if alarm else 'DAILY',str(day) if alarm else '',str(minute) if alarm else '857',None if alarm else day+1,now,now))
     if alarm:
-        c.execute('''INSERT INTO reminder_events(id,reminderId,dueAt,state,retryIndex,nextSignalAt,presentationGeneration) VALUES(1,1,?,'SCHEDULED',0,?,0)''',(due,due))
-        c.execute('INSERT INTO final_schedule_slots(reminderId,epochDay,minuteOfDay,creationOrder) VALUES(1,?,857,?)',(day,now))
+        c.execute('''INSERT INTO reminder_events(id,reminderId,dueAt,state,retryIndex,nextSignalAt,presentationGeneration,logicalSlot) VALUES(1,1,?,'SCHEDULED',0,?,0,?)''',(due,due,f'{day}:{minute}'))
+        c.execute('INSERT INTO final_schedule_slots(reminderId,epochDay,minuteOfDay,creationOrder) VALUES(1,?,?,?)',(day,minute,now))
     c.execute("INSERT INTO final_memos(kind,text,createdAt,creationOrder) VALUES('TEXT','APK MEMO',?,?)",(now,now))
     c.commit();c.execute('PRAGMA wal_checkpoint(TRUNCATE)');c.execute('PRAGMA journal_mode=DELETE');c.close()
     shell(f'run-as {PKG} rm -f databases/nezabudka_final.db-wal databases/nezabudka_final.db-shm')

@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 set -uo pipefail
+python3 - <<'CAPABILITIES'
+import json,subprocess
+from pathlib import Path
+def adb(*args): return subprocess.run(['adb','shell',*args],capture_output=True,text=True).stdout.strip()
+values={key:adb('getprop',key) for key in ('ro.build.version.sdk','ro.build.version.release','ro.product.model','ro.product.cpu.abi')}
+values['page_size']=adb('getconf','PAGE_SIZE')
+Path('evidence/device-capabilities.json').write_text(json.dumps(values,indent=2))
+print('DEVICE CAPABILITIES',json.dumps(values))
+CAPABILITIES
 adb logcat -c
 python3 control/ci/check-delivered-apk.py > evidence/delivered-apk.log 2>&1
 binary_result=$?
@@ -18,7 +27,8 @@ adb pull /sdcard/Android/data/com.nezabudka.preview/files/device-evidence eviden
 cat evidence/instrumentation.log
 python3 - <<'REPORTS'
 from pathlib import Path
-import base64,re,subprocess
+import base64,re,subprocess,io
+from PIL import Image
 import xml.etree.ElementTree as ET
 for p in Path('source/app/build/outputs/androidTest-results').rglob('*.xml'):
     print('DEVICE TEST XML:',p)
@@ -43,13 +53,16 @@ if log.exists():
     print('\n'.join(line for line in lines if any(mark in line for mark in markers))[-24000:])
 # Signed artifact download URLs can be unavailable to the executor. Small chunks let
 # it inspect existing public synthetic screenshots through the read-only job log.
-selected = {'fullAlarmSidePaddingContinuesTheOriginalLowerColor', 'realOfflineVoskStartsMicPulseAndStopsWithoutBlockingMain', 'actualAlarmManagerDeliveryCompactTapFullAndClose'}
+selected = {'fullAlarmSidePaddingContinuesTheOriginalLowerColor', 'realOfflineVoskStartsMicPulseAndStopsWithoutBlockingMain', 'actualAlarmManagerDeliveryCompactTapFullAndClose', 'photo-viewer-menu'}
 for p in sorted(Path('evidence').rglob('*.png')):
     if p.stem not in failed | selected and 'delivered-apk' not in p.parts:
         continue
     # Keep connector logs below transport limits; the artifact retains original PNGs.
-    small = subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-i',str(p),'-vf','scale=540:-1','-frames:v','1','-f','image2pipe','-vcodec','png','pipe:1'],capture_output=True)
-    data = base64.b64encode(small.stdout if small.returncode == 0 else p.read_bytes()).decode('ascii')
+    pic = Image.open(p)
+    pic.thumbnail((540, 1400))
+    buffer = io.BytesIO()
+    pic.save(buffer, format='PNG')
+    data = base64.b64encode(buffer.getvalue()).decode('ascii')
     for index in range(0, len(data), 4096):
         print('DEVICE_PNG', p.name, index // 4096, data[index:index + 4096])
 REPORTS

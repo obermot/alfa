@@ -60,6 +60,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           test -r /dev/kvm && test -w /dev/kvm
+          python3 -m pip install --quiet Pillow
           mkdir -p evidence
           printf 'source_sha=%s\n' '${{ steps.request.outputs.sha }}' > evidence/provenance.txt
       - name: Fetch official Russian Vosk model for offline instrumentation only
