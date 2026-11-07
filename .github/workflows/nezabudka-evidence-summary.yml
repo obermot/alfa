@@ -11,33 +11,22 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Summarize existing reports without compiling or running devices
+      - name: Display selected synthetic screenshots from existing reports
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh run download 42403633411 --repo obermot/alfa --dir reports
+          gh run download 42404787794 --repo obermot/alfa --pattern '*api-26-*' --dir reports
+          python3 -m pip install --quiet Pillow
           python3 - <<'PY_REPORT'
           from pathlib import Path
-          import xml.etree.ElementTree as E
-          for p in Path('reports').rglob('lint-results-debug.xml'):
-              print('LINT REPORT',p)
-              root=E.parse(p).getroot()
-              for i in root.findall('issue'):
-                  if i.get('severity') in ('Error','Fatal','Warning'):
-                      print('LINT ISSUE', i.get('id'), i.get('severity'), i.get('message'))
-                      for loc in i.findall('location'): print('LOCATION',loc.attrib)
-              break
+          import base64,io
+          from PIL import Image
+          names={'fullAlarmSidePaddingContinuesTheOriginalLowerColor','onboardingNamePermissionsInstructionAndFinishWorkOffline'}
+          for p in Path('reports').rglob('*.png'):
+              if p.stem not in names: continue
+              pic=Image.open(p)
+              pic.thumbnail((540,1400))
+              out=io.BytesIO();pic.save(out,format='PNG')
+              data=base64.b64encode(out.getvalue()).decode()
+              for i in range(0,len(data),4096): print('DEVICE_PNG',p.name,i//4096,data[i:i+4096])
           PY_REPORT
-          gh api --allow-escape-sequences repos/obermot/alfa/actions/jobs/128493174145/logs > oldlogs
-          python3 - <<'PY_LOG'
-          import zipfile
-          from pathlib import Path
-          p=Path('oldlogs')
-          if zipfile.is_zipfile(p):
-              z=zipfile.ZipFile(p)
-              text='\n'.join(z.read(n).decode('utf-8','replace') for n in z.namelist())
-          else: text=p.read_text(errors='replace')
-          print('OLD LOG BYTES',p.stat().st_size)
-          for line in text.splitlines():
-              if any(x in line for x in ('<testsuite','<failure','APKCASE','tests completed','FAILED')): print(line[:2500])
-          PY_LOG
