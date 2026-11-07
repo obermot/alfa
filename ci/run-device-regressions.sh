@@ -27,7 +27,10 @@ adb shell dumpsys activity activities > evidence/activities.txt
 adb shell dumpsys alarm > evidence/alarms.txt
 adb shell screencap -p /sdcard/device-final.png
 adb pull /sdcard/device-final.png evidence/ || true
-adb pull /sdcard/Android/data/com.nezabudka.preview/files/device-evidence evidence/ || true
+if ! adb pull /sdcard/Android/data/com.nezabudka.preview/files/device-evidence evidence/; then
+    # Android11 scoped storage may deny shell but permit the debug application's own UID.
+    adb exec-out run-as com.nezabudka.preview tar -C /sdcard/Android/data/com.nezabudka.preview/files -cf - device-evidence | tar -xf - -C evidence || true
+fi
 cat evidence/instrumentation.log
 python3 - <<'REPORTS'
 from pathlib import Path
