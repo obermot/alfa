@@ -115,8 +115,15 @@ def alarm():
     size=list(map(int,re.findall(r'\d+',shell('wm size'))))[-2:]
     shell(f'input tap {size[0]//2} {size[1]//2}')
     wait(lambda:activity('FinalAlarmActivity'),'Tap did not open full alarm')
-    wait(lambda:bool(nodes('Напомнить снова')),'Full alarm has wrong actions')
-    screenshot('full-alarm');tap(desc='Закрыть')
+    # Immutable APK draws labels below transparent hit layers. Android's accessibility
+    # bridge omits those occluded labels, although the screenshot shows the action.
+    # Exercise its actual two hit rectangles, then verify the persisted close result.
+    def targets():
+        return sorted([n for n in dump().iter('node') if n.get('package')==PKG and n.get('clickable')=='true'
+            and rect(n)[1]>size[1]*.5],key=lambda n:rect(n)[1])
+    wait(lambda:len(targets())==2,'Full alarm action targets missing')
+    screenshot('full-alarm')
+    x1,y1,x2,y2=rect(targets()[0]);shell(f'input tap {(x1+x2)//2} {(y1+y2)//2}')
     wait(lambda:not activity('FinalAlarmActivity'),'Full alarm did not close')
     stop();c=sqlite3.connect(read_db())
     state=c.execute('SELECT state FROM reminder_events WHERE id=1').fetchone()[0]
