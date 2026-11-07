@@ -13,6 +13,10 @@ concurrency:
   cancel-in-progress: true
 jobs:
   android:
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 30, 35]
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -60,10 +64,10 @@ jobs:
       - name: Compile app and instrumentation before starting emulator
         working-directory: source
         run: gradle --no-daemon --max-workers=2 :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
-      - name: Execute real Android UI regressions (API 35)
+      - name: Check delivered APK and expanded Android regressions
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, resolved commit
         with:
-          api-level: 35
+          api-level: ${{ matrix.api }}
           arch: x86_64
           target: default
           profile: pixel_2
@@ -78,7 +82,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nezabudka-device-evidence-${{ steps.request.outputs.sha }}
+          name: nezabudka-device-evidence-api-${{ matrix.api }}-${{ steps.request.outputs.sha }}
           path: |
             evidence/
             source/app/build/reports/androidTests/

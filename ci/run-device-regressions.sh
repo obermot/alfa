@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -uo pipefail
 adb logcat -c
+python3 control/ci/check-delivered-apk.py > evidence/delivered-apk.log 2>&1
+binary_result=$?
+cat evidence/delivered-apk.log
 # The grant is applied after install by the test runner where supported.
 cd source
 gradle --no-daemon --max-workers=2 :app:connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true --stacktrace > ../evidence/instrumentation.log 2>&1
@@ -35,4 +38,5 @@ for p in sorted(Path('evidence').rglob('*.png')):
     for index in range(0, len(data), 4096):
         print('DEVICE_PNG', p.name, index // 4096, data[index:index + 4096])
 REPORTS
+if [ "$binary_result" -ne 0 ]; then exit "$binary_result"; fi
 exit "$result"
