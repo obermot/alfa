@@ -23,8 +23,8 @@ jobs:
               print('LINT REPORT',p)
               root=E.parse(p).getroot()
               for i in root.findall('issue'):
-                  if i.get('severity') in ('Error','Fatal'):
-                      print('LINT ERROR', i.attrib)
+                  if i.get('severity') in ('Error','Fatal','Warning'):
+                      print('LINT ISSUE', i.get('id'), i.get('severity'), i.get('message'))
                       for loc in i.findall('location'): print('LOCATION',loc.attrib)
               break
           PY_REPORT
