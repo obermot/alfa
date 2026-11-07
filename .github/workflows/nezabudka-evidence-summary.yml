@@ -15,13 +15,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh run download 42404787794 --repo obermot/alfa --pattern '*api-26-*' --dir reports
+          gh run download 42404787794 --repo obermot/alfa --pattern '*api-35-*' --dir reports
           python3 -m pip install --quiet Pillow
           python3 - <<'PY_REPORT'
           from pathlib import Path
           import base64,io
           from PIL import Image
-          names={'fullAlarmSidePaddingContinuesTheOriginalLowerColor','onboardingNamePermissionsInstructionAndFinishWorkOffline'}
+          names={'original-apk-alarm-compact-full-close','compact-alarm'}
+          for p in Path('reports').rglob('original-apk-alarm-compact-full-close.xml'):
+              print('BASELINE UI XML',p.read_text()[:18000])
           for p in Path('reports').rglob('*.png'):
               if p.stem not in names: continue
               pic=Image.open(p)
