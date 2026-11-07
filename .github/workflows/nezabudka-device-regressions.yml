@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: nezabudka-device-regressions
   cancel-in-progress: true
@@ -16,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [26, 30, 35]
+        api: [26, 30, 35, 36]
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -61,6 +62,21 @@ jobs:
           test -r /dev/kvm && test -w /dev/kvm
           mkdir -p evidence
           printf 'source_sha=%s\n' '${{ steps.request.outputs.sha }}' > evidence/provenance.txt
+      - name: Recover compact summary of previous API35 results
+        if: matrix.api == 35
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api repos/obermot/alfa/actions/jobs/128493174145/logs > "$RUNNER_TEMP/previous-api35.log"
+          python3 - "$RUNNER_TEMP/previous-api35.log" <<'PY_SUMMARY'
+          import sys,re
+          text=open(sys.argv[1]).read()
+          for line in text.splitlines():
+              if any(x in line for x in ('<testsuite','<failure>','DELIVERED APK CASE:')):
+                  print(line[:2500])
+          PY_SUMMARY
       - name: Fetch official Russian Vosk model for offline instrumentation only
         shell: bash
         run: |
@@ -70,7 +86,7 @@ jobs:
           sha256sum source/app/src/androidTest/assets/vosk-model-small-ru-0.22.zip > evidence/test-model.sha256
       - name: Compile app and instrumentation before starting emulator
         working-directory: source
-        run: gradle --no-daemon --max-workers=2 :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+        run: gradle --no-daemon --max-workers=2 :app:lintDebug :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
       - name: Check delivered APK and expanded Android regressions
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, resolved commit
         with:
@@ -93,6 +109,7 @@ jobs:
           path: |
             evidence/
             source/app/build/reports/androidTests/
+            source/app/build/reports/lint-results-debug.*
             source/app/build/outputs/androidTest-results/
           if-no-files-found: warn
           retention-days: 3

@@ -129,6 +129,7 @@ try:
     if api>=31:shell(f'appops set {PKG} SCHEDULE_EXACT_ALARM allow')
     shell(f'appops set {PKG} SYSTEM_ALERT_WINDOW deny')
     shell('settings put secure immersive_mode_confirmations confirmed')
+    shell('settings put global heads_up_notifications_enabled 0')
     shell('svc wifi disable',check=False);shell('svc data disable',check=False)
     case('original-apk-onboarding-and-home',first_launch)
     stop();p=read_db();c=sqlite3.connect(p);c.execute('PRAGMA wal_checkpoint(TRUNCATE)');c.execute('PRAGMA journal_mode=DELETE');c.close();BASE=p.read_bytes()
