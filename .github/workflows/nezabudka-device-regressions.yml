@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
-      DEVICE_TEST_FILTER: com.nezabudka.testharness.FinalEditorDeviceTest#editorHeaderExtendsToBothScreenEdgesWithoutStretchingControls
+      DEVICE_TEST_FILTER: com.nezabudka.testharness.FinalEditorDeviceTest
     steps:
       - uses: actions/checkout@v4
         with:

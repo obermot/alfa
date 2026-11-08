@@ -60,7 +60,7 @@ if log.exists():
     print('\n'.join(line for line in lines if any(mark in line for mark in markers))[-24000:])
 # Signed artifact download URLs can be unavailable to the executor. Small chunks let
 # it inspect existing public synthetic screenshots through the read-only job log.
-selected = {'fullAlarmSidePaddingContinuesTheOriginalLowerColor', 'realOfflineVoskStartsMicPulseAndStopsWithoutBlockingMain', 'actualAlarmManagerDeliveryCompactTapFullAndClose', 'photo-viewer-menu', 'launcher-icon', 'editor-header-full-width'}
+selected = {'fullAlarmSidePaddingContinuesTheOriginalLowerColor', 'realOfflineVoskStartsMicPulseAndStopsWithoutBlockingMain', 'actualAlarmManagerDeliveryCompactTapFullAndClose', 'photo-viewer-menu', 'launcher-icon', 'editor-header-full-width', 'editor-stable-scale-with-ime'}
 for p in sorted(Path('evidence').rglob('*.png')):
     if p.stem not in failed | selected and 'delivered-apk' not in p.parts:
         continue
