@@ -72,7 +72,7 @@ jobs:
           sha256sum source/app/src/androidTest/assets/vosk-model-small-ru-0.22.zip > evidence/test-model.sha256
       - name: Compile app and instrumentation before starting emulator
         working-directory: source
-        run: gradle --no-daemon --max-workers=2 :app:lintDebug :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+        run: bash ../control/ci/compile-device-checks.sh
       - name: Check delivered APK and expanded Android regressions
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2, resolved commit
         with:
