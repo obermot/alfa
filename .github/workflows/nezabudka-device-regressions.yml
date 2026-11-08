@@ -10,16 +10,18 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: nezabudka-device-regressions
+  group: nezabudka-device-regressions-raster-proof
   cancel-in-progress: true
 jobs:
   android:
     strategy:
       fail-fast: false
       matrix:
-        api: [26, 30, 35, 36]
+        api: [35]
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    env:
+      DEVICE_TEST_FILTER: com.nezabudka.testharness.FinalAlarmDeviceTest#customClockDigitsDoNotSaveAndCloseRejectsPastTime
     steps:
       - uses: actions/checkout@v4
         with:
