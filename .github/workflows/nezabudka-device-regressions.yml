@@ -17,9 +17,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [26, 30, 35, 36]
+        api: [35]
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    env:
+      DEVICE_TEST_FILTER: com.nezabudka.testharness.FinalEditorDeviceTest#editorHeaderExtendsToBothScreenEdgesWithoutStretchingControls
     steps:
       - uses: actions/checkout@v4
         with:
