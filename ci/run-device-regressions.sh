@@ -16,6 +16,8 @@ cat evidence/delivered-apk.log
 # The grant is applied after install by the test runner where supported.
 cd source
 filter_args=()
+# A request may narrow validation after an isolated change; absent means the full suite.
+DEVICE_TEST_FILTER="${DEVICE_TEST_FILTER:-$(sed -n 's/^test_filter=//p' ../control/ci/DEVICE_TEST_REQUEST)}"
 if [ -n "${DEVICE_TEST_FILTER:-}" ]; then
     filter_args+=("-Pandroid.testInstrumentationRunnerArguments.class=$DEVICE_TEST_FILTER")
 fi
